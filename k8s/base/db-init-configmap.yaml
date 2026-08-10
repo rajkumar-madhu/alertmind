@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-sql
+  namespace: alertmind
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    CREATE TABLE IF NOT EXISTS users (
+      id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      name          TEXT        NOT NULL,
+      email         TEXT        UNIQUE NOT NULL,
+      password_hash TEXT        NOT NULL,
+      role          TEXT        NOT NULL DEFAULT 'engineer',
+      team          TEXT,
+      avatar_url    TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tickets (
+      id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      title          TEXT        NOT NULL,
+      description    TEXT        NOT NULL,
+      severity       TEXT        NOT NULL CHECK (severity IN ('P1','P2','P3','P4')),
+      status         TEXT        NOT NULL DEFAULT 'open' CHECK (status IN ('open','in-progress','resolved','closed')),
+      category       TEXT        NOT NULL,
+      affected_ci    TEXT,
+      source         TEXT        DEFAULT 'manual',
+      raw_alert      JSONB,
+      ai_resolution  TEXT,
+      ai_steps       JSONB,
+      ai_confidence  INT,
+      ai_analyzed    BOOLEAN     DEFAULT FALSE,
+      ai_analyzed_at TIMESTAMPTZ,
+      root_cause     TEXT,
+      resolution     TEXT,
+      prevention     TEXT,
+      resolved_by    TEXT,
+      resolved_at    TIMESTAMPTZ,
+      ingested       BOOLEAN     DEFAULT FALSE,
+      sla_due_at     TIMESTAMPTZ,
+      sla_breached   BOOLEAN     DEFAULT FALSE,
+      created_by     UUID        NOT NULL,
+      assignee_id    UUID,
+      created_at     TIMESTAMPTZ DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS comments (
+      id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      content    TEXT        NOT NULL,
+      ticket_id  UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      user_id    UUID        NOT NULL REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS runbooks (
+      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      title       TEXT        NOT NULL,
+      content     TEXT        NOT NULL,
+      category    TEXT        NOT NULL,
+      tags        TEXT[]      DEFAULT '{}',
+      use_count   INT         DEFAULT 0,
+      created_by  UUID,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS cmdb_items (
+      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        TEXT        NOT NULL,
+      type        TEXT        NOT NULL DEFAULT 'server',
+      environment TEXT        DEFAULT 'production',
+      status      TEXT        DEFAULT 'active',
+      ip_address  TEXT,
+      hostname    TEXT,
+      os          TEXT,
+      team        TEXT,
+      metadata    JSONB,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS alertmind_documents (
+      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      content     TEXT        NOT NULL,
+      metadata    JSONB       DEFAULT '{}',
+      embedding   VECTOR(768),
+      collection  TEXT        DEFAULT 'incidents',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tickets_status     ON tickets(status);
+    CREATE INDEX IF NOT EXISTS idx_tickets_severity   ON tickets(severity);
+    CREATE INDEX IF NOT EXISTS idx_tickets_category   ON tickets(category);
+    CREATE INDEX IF NOT EXISTS idx_tickets_created    ON tickets(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tickets_sla        ON tickets(sla_due_at);
+    CREATE INDEX IF NOT EXISTS idx_tickets_assignee   ON tickets(assignee_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_ticket    ON comments(ticket_id);
+    CREATE INDEX IF NOT EXISTS idx_runbooks_category  ON runbooks(category);
+    CREATE INDEX IF NOT EXISTS idx_cmdb_type          ON cmdb_items(type);
+    CREATE INDEX IF NOT EXISTS idx_docs_metadata      ON alertmind_documents USING GIN(metadata);
+    CREATE INDEX IF NOT EXISTS idx_docs_embedding     ON alertmind_documents
+      USING ivfflat(embedding vector_cosine_ops) WITH (lists = 100);
+    CREATE INDEX IF NOT EXISTS idx_tickets_search ON tickets
+      USING GIN(to_tsvector('english', title || ' ' || description));
+
+    CREATE OR REPLACE FUNCTION match_documents (
+      query_embedding VECTOR(768),
+      match_count     INT   DEFAULT 5,
+      filter          JSONB DEFAULT '{}'
+    )
+    RETURNS TABLE (
+      id         UUID,
+      content    TEXT,
+      metadata   JSONB,
+      similarity FLOAT
+    )
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN QUERY
+      SELECT
+        d.id, d.content, d.metadata,
+        1 - (d.embedding <=> query_embedding) AS similarity
+      FROM alertmind_documents d
+      WHERE d.metadata @> filter
+      ORDER BY d.embedding <=> query_embedding
+      LIMIT match_count;
+    END; $$;
+
+    CREATE OR REPLACE VIEW ticket_daily_stats AS
+    SELECT
+      DATE(created_at)                                       AS day,
+      COUNT(*)                                               AS incidents,
+      COUNT(*) FILTER (WHERE status = 'resolved')            AS resolved,
+      COUNT(*) FILTER (WHERE ai_analyzed = TRUE)             AS ai_resolved,
+      COUNT(*) FILTER (WHERE sla_breached = TRUE)            AS sla_breached,
+      AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/60)
+        FILTER (WHERE resolved_at IS NOT NULL)               AS avg_resolution_mins
+    FROM tickets
+    GROUP BY DATE(created_at)
+    ORDER BY day DESC;
+
+    INSERT INTO users (name, email, password_hash, role, team)
+    VALUES ('Admin', 'admin@alertmind.ai',
+      '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj0n/X7z5Ake',
+      'admin', 'Platform')
+    ON CONFLICT (email) DO NOTHING;

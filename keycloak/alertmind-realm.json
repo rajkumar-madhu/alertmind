@@ -1,0 +1,122 @@
+{
+  "id": "alertmind",
+  "realm": "alertmind",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrator role with full control"
+      },
+      {
+        "name": "engineer",
+        "description": "Engineer role with ticket update permissions"
+      },
+      {
+        "name": "viewer",
+        "description": "Viewer role with read-only access"
+      }
+    ]
+  },
+  "groups": [],
+  "clients": [
+    {
+      "clientId": "alertmind-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "http://localhost:5175/*",
+        "http://localhost:5173/*",
+        "http://localhost/*",
+        "http://127.0.0.1:5175/*",
+        "http://127.0.0.1:5173/*",
+        "http://127.0.0.1/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "protocolMappers": [
+        {
+          "name": "alertmind-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "alertmind-frontend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "alertmind-backend",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "alertmind-backend-secret-key-123456",
+      "protocol": "openid-connect",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@alertmind.ai",
+      "email": "admin@alertmind.ai",
+      "firstName": "AlertMind",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Admin@2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "engineer"
+      ]
+    },
+    {
+      "username": "engineer@alertmind.ai",
+      "email": "engineer@alertmind.ai",
+      "firstName": "AlertMind",
+      "lastName": "Engineer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Engineer@2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "engineer"
+      ]
+    },
+    {
+      "username": "viewer@alertmind.ai",
+      "email": "viewer@alertmind.ai",
+      "firstName": "AlertMind",
+      "lastName": "Viewer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Viewer@2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "viewer"
+      ]
+    }
+  ]
+}

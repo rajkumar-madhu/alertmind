@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: alertmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      containers:
+        - name: n8n
+          image: n8nio/n8n:latest
+          env:
+            - name: N8N_BASIC_AUTH_ACTIVE
+              value: "true"
+            - name: N8N_BASIC_AUTH_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: alertmind-config
+                  key: N8N_USER
+            - name: N8N_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-secrets
+                  key: N8N_PASS
+            - name: N8N_HOST
+              value: "alert.infra.veltacore.in"
+            - name: WEBHOOK_URL
+              value: "http://alert.infra.veltacore.in/webhook/"
+          ports:
+            - containerPort: 5678
+          volumeMounts:
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+          resources:
+            requests:
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+      volumes:
+        - name: n8n-data
+          persistentVolumeClaim:
+            claimName: n8n-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-pvc
+  namespace: alertmind
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: alertmind
+spec:
+  selector:
+    app: n8n
+  ports:
+    - port: 5678
+      targetPort: 5678

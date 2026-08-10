@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmind-config
+  namespace: alertmind
+data:
+  NODE_ENV: "production"
+  PORT: "4000"
+  VITE_API_URL: "https://alertmind.api.wecrew.in"
+  FRONTEND_URL: "https://alertmind.wecrew.in"
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  # llama3.3:70b requires ~43 GB RAM — not viable on a 16 GB node.
+  # llama3.2:3b (~2 GB) runs well on CPU. Change to llama3.3:70b if you add a GPU node.
+  LLM_MODEL: "llama3.2:3b"
+  EMBED_MODEL: "nomic-embed-text"
+  LLM_TEMP: "0.2"
+  LLM_CTX: "8192"
+  RAG_TOP_K: "5"
+  CHUNK_SIZE: "1000"
+  CHUNK_OVERLAP: "200"
+  JWT_EXPIRES: "7d"
+  LOG_LEVEL: "info"
+  DOMAIN: "alertmind.wecrew.in"
+  POSTGRES_DB: "alertmind"
+  POSTGRES_USER: "alertmind"
+  FLOWISE_USER: "admin"
+  N8N_USER: "admin"

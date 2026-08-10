@@ -1,0 +1,186 @@
+# Open Policy Agent — the PBAC decision point for OpaAuthorizationMiddleware.
+#
+# This existed in docker-compose from the start but was never ported to Kubernetes,
+# so `OPA_URL` fell back to its settings.py default (http://opa:8181/...), resolved to
+# nothing, and — because NODE_ENV=production makes DEBUG False and the middleware fails
+# CLOSED — every authenticated /api/ request returned 500. Only /api/health/ and
+# /api/webhook/ are exempt from the middleware, which is why the alert -> incident ->
+# AI pipeline looked healthy while the signed-in UI was entirely down.
+#
+# The Service MUST be named `opa` on port 8181: settings.py builds the default
+# OPA_URL from that name, and nothing in the overlays overrides it.
+#
+# The policy is mounted from a ConfigMap generated off opa/policy.rego. That file is the
+# source of truth — when you edit it, re-sync this ConfigMap and restart the Deployment,
+# or the cluster silently keeps enforcing the old rules.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy
+  namespace: alertmind
+data:
+  policy.rego: |
+    package alertmind.authz
+
+    import rego.v1
+
+    default allow := false
+
+    # Admins can do anything
+    allow if {
+        input.user.roles[_] == "admin"
+    }
+
+    # Engineers can read any resource
+    allow if {
+        input.user.roles[_] == "engineer"
+        input.action == "read"
+    }
+
+    # Engineers can create tickets and comments
+    allow if {
+        input.user.roles[_] == "engineer"
+        input.action == "create"
+        valid_engineer_create_resource
+    }
+
+    # Engineers can update tickets if they are the creator or assignee
+    allow if {
+        input.user.roles[_] == "engineer"
+        input.action == "update"
+        input.resource == "ticket"
+        is_owner_or_assignee
+    }
+
+    # Engineers can update comments if they are the creator
+    allow if {
+        input.user.roles[_] == "engineer"
+        input.action == "update"
+        input.resource == "comment"
+        is_comment_owner
+    }
+
+    # Engineers can update shared operational resources (runbooks, CMDB items).
+    # These are shared libraries, not user-owned, so no ownership check applies.
+    # Delete is intentionally NOT granted here — destructive removal of shared
+    # infra/runbooks stays admin-only.
+    allow if {
+        input.user.roles[_] == "engineer"
+        input.action == "update"
+        input.resource in {"runbook", "cmdb"}
+    }
+
+    # Viewers can read any resource
+    allow if {
+        input.user.roles[_] == "viewer"
+        input.action == "read"
+    }
+
+    valid_engineer_create_resource if {
+        input.resource == "ticket"
+    }
+
+    valid_engineer_create_resource if {
+        input.resource == "comment"
+    }
+
+    # Engineers (and admins) can ingest documents into the knowledge base.
+    # `/api/ingest/` maps to the "document" resource in the middleware.
+    valid_engineer_create_resource if {
+        input.resource == "document"
+    }
+
+    # Engineers can author runbooks and register CMDB items — the frontend
+    # exposes "+ Add Runbook"/"+ Add CI" to all users and RunbookViewSet stamps
+    # the engineer as `created_by`, so these creates must reach non-admins.
+    valid_engineer_create_resource if {
+        input.resource == "runbook"
+    }
+
+    valid_engineer_create_resource if {
+        input.resource == "cmdb"
+    }
+
+    is_owner_or_assignee if {
+        input.resource_owner == input.user.email
+    }
+
+    is_owner_or_assignee if {
+        input.resource_assignee == input.user.email
+    }
+
+    is_comment_owner if {
+        input.resource_owner == input.user.email
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: alertmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+      annotations:
+        # Roll the pod when the policy changes; without this a ConfigMap edit is
+        # picked up only on the next unrelated restart.
+        checksum/policy: "v1"
+    spec:
+      containers:
+        - name: opa
+          # Same tag as docker-compose. Side-loaded into kind, so IfNotPresent keeps
+          # rollouts working without reaching Docker Hub.
+          image: openpolicyagent/opa:latest-static
+          imagePullPolicy: IfNotPresent
+          args:
+            - "run"
+            - "--server"
+            - "--log-level=info"
+            - "--addr=:8181"
+            - "/policy/policy.rego"
+          ports:
+            - containerPort: 8181
+          volumeMounts:
+            - name: policy
+              mountPath: /policy
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8181
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8181
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              memory: "128Mi"
+      volumes:
+        - name: policy
+          configMap:
+            name: opa-policy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: alertmind
+spec:
+  selector:
+    app: opa
+  ports:
+    - port: 8181
+      targetPort: 8181

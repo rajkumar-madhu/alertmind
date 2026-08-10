@@ -1,0 +1,92 @@
+# In-cluster reverse proxy for the alertmind namespace.
+#
+# Fronts https://alertmind.wecrew.in (the SPA host). NOTE: the API host
+# alertmind.api.wecrew.in bypasses this proxy entirely and hits api:8000
+# straight from `api-ingress.yaml` — changes here do NOT affect that host.
+#
+# This file is the back-port of the config running in the cluster. Two rules
+# keep nginx bootable and must be preserved:
+#   1. nginx resolves `upstream` server names at STARTUP. An upstream naming a
+#      Service that does not exist in this namespace is a hard failure
+#      ("host not found in upstream") and the pod CrashLoops, taking the site
+#      down. Only declare upstreams for Services that always exist here.
+#      flowise/n8n are deleted by overlays/prod, so they are NOT upstreams.
+#   2. Cross-namespace / optional targets go through a *variable* proxy_pass,
+#      which defers resolution to request time — that requires the `resolver`
+#      directive below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: alertmind
+data:
+  nginx.conf: |
+    events { worker_connections 1024; }
+
+    http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+      sendfile      on;
+      gzip          on;
+      gzip_types    text/plain text/css application/json application/javascript text/xml application/xml;
+
+      # In-cluster DNS — required when using variable proxy_pass (deferred resolve)
+      resolver kube-dns.kube-system.svc.cluster.local valid=30s ipv6=off;
+
+      limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
+      limit_req_zone $binary_remote_addr zone=rag:10m rate=10r/m;
+
+      # Static upstreams that always exist in this namespace
+      upstream api { server api:8000; }
+      upstream web { server web:80; }
+      upstream keycloak { server keycloak.keycloak.svc.cluster.local:8080; }
+
+      server {
+        listen 80;
+        server_name alertmind.wecrew.in;
+        client_max_body_size 50M;
+
+        location /api/ {
+          limit_req zone=api burst=20 nodelay;
+          proxy_pass         http://api;
+          proxy_set_header   Host $host;
+          proxy_set_header   X-Real-IP $remote_addr;
+          proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_read_timeout 120s;
+        }
+
+        location /health {
+          proxy_pass http://api;
+        }
+
+        location /auth/ {
+          proxy_pass         http://keycloak/;
+          proxy_set_header   Host $host;
+          proxy_set_header   X-Real-IP $remote_addr;
+          proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # flowise is not deployed in this cluster — return clear 503 instead of blocking nginx start
+        location /flowise/ {
+          default_type text/plain;
+          return 503 "flowise service is not deployed\n";
+        }
+
+        # n8n lives in namespace n8n (service port 80 -> 5678)
+        location /webhook/ {
+          set $n8n_upstream http://n8n.n8n.svc.cluster.local:80;
+          proxy_pass         $n8n_upstream;
+          proxy_set_header   Host $host;
+          proxy_http_version 1.1;
+          proxy_set_header   Upgrade $http_upgrade;
+          proxy_set_header   Connection "upgrade";
+        }
+
+        location / {
+          proxy_pass         http://web;
+          proxy_set_header   Host $host;
+          proxy_intercept_errors on;
+          error_page 404 = /index.html;
+        }
+      }
+    }

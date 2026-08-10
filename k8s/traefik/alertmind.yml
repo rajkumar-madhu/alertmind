@@ -1,0 +1,17 @@
+# Public HTTPS gateway route for AlertMind.
+# TLS terminates in the Kubernetes ingress using the cert-manager certificate.
+tcp:
+  routers:
+    alertmind-cluster:
+      entryPoints:
+        - websecure
+      rule: HostSNI(`alertmind.wecrew.in`) || HostSNI(`alertmind.api.wecrew.in`)
+      priority: 110
+      tls:
+        passthrough: true
+      service: alertmind-cluster
+  services:
+    alertmind-cluster:
+      loadBalancer:
+        servers:
+          - address: "127.0.0.1:8443"

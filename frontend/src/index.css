@@ -1,0 +1,299 @@
+/* AlertMind — Global Styles */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Sovereign brand ────────────────────────────────────────
+   Cloned from https://sovereign.ops.wecrew.in — the shared wecrew
+   identity (argus-itsm-frontend wears it too). Warm paper workspace,
+   ink text, coral accent, blue links. These tokens are app-wide: the
+   public landing page and the signed-in app are one UI.
+   ──────────────────────────────────────────────────────────── */
+:root {
+  --ink: #0e1116;      /* brand-ink */
+  --ink2: #5c5a56;     /* muted-foreground */
+  --ink3: #6e6a62;     /* darkened from the brand's muted grey to clear 4.5:1 on --white */
+  --paper: #f4f1ea;    /* brand-paper */
+  --paper2: #ebe6dc;   /* brand-paper-2 / surface-strong — table header strips,
+                          inset panels. Use this instead of --border, which is a
+                          border colour and too dark to carry --ink3 text. */
+  --white: #fffcf7;    /* surface / card */
+  --border: #ddd6c8;
+  --border2: #d4cdc0;  /* input */
+  --amber: #ff5b2e;    /* brand-coral — accent, primary CTA, eyebrows */
+  --amberL: #fde8e0;   /* accent */
+  --amberB: #f6c9b8;
+  /* Text ON --amberL. Coral-on-coral-tint is only ~2.6:1, so the brand pairs
+     its accent with this darker foreground (Sovereign's --accent-foreground). */
+  --amberFg: #9a3412;
+  /* Status foregrounds. These MUST be tokens, not literals: they sit on the
+     matching tint (--redL etc.) which inverts between themes, so a hardcoded
+     dark red becomes unreadable on the dark tint. Flip them, not the tints. */
+  --redFg:    #b91c1c;
+  --orangeFg: #92400e;
+  --greenFg:  #0b6044;
+  --blueFg:   #2b4cff;
+  --blue: #2b4cff;     /* brand-blue — links, charts, focus ring */
+  --blueL: #e9ecff;
+  --blueB: #c3ccff;
+  --green: #0f7a55;    /* brand-green */
+  --greenL: #e4f1ea;
+  --red: #dc2626;
+  --redL: #fbeae8;
+  --orange: #d97706;
+  --orangeL: #fbeedb;
+  --serif: 'Fraunces', 'IBM Plex Sans', ui-serif, Georgia, serif;
+  --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(14,17,22,.06);
+  --shadow-md: 0 1px 2px rgba(14,17,22,.06), 0 8px 24px -14px rgba(14,17,22,.16);
+  --shadow-lg: 0 1px 2px rgba(14,17,22,.06), 0 12px 32px -18px rgba(14,17,22,.16);
+  /* Sovereign is flat and restrained — keep the atmosphere subtle. */
+  --mesh1: rgba(255,91,46,.07);
+  --mesh2: rgba(43,76,255,.05);
+  --grid: rgba(14,17,22,.035);
+}
+
+/* ── Dark theme ─────────────────────────────────────────── */
+/* Sovereign dark: the ink becomes the ground (mirrors the brand's ink nav rail). */
+html[data-theme="dark"] {
+  --ink:    #f4f1ea;
+  --ink2:   #c8c4bc;
+  --ink3:   #918d85;
+  --paper:  #0e1116;
+  --white:  #1a1f28;
+  --border: #252b36;
+  --border2:#333a47;
+  --paper2: #151a22;   /* dark surface-strong */
+  --amberL: #2a1710;
+  --amberB: #5c2a18;
+  --amberFg: #ffab8d;   /* light coral reads on the dark accent tint */
+  --redFg:    #fca5a5;
+  --orangeFg: #fcd34d;
+  --greenFg:  #6ee7a8;
+  --blueFg:   #9db2ff;
+  --blueL:  #141b3d;
+  --blueB:  #26326e;
+  --green:  #17a06f;
+  --greenL: #0c2a1f;
+  --redL:   #2b1316;
+  --orangeL:#241b0a;
+  --shadow:    0 1px 4px rgba(0,0,0,0.45);
+  --shadow-md: 0 6px 22px rgba(0,0,0,0.55);
+  --shadow-lg: 0 18px 50px rgba(0,0,0,0.65);
+  --mesh1: rgba(255,91,46,.10);
+  --mesh2: rgba(43,76,255,.08);
+  --grid: rgba(255,255,255,0.035);
+  color-scheme: dark;
+}
+html[data-theme="dark"] body { background: var(--paper); }
+html[data-theme="dark"] .btn-danger:hover { background:#3A181C; }
+
+html { scroll-behavior: smooth; }
+html, body { transition: background .35s ease, color .35s ease; }
+
+body {
+  font-family: var(--sans);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.page-loader { min-height:100vh; background:var(--paper); }
+
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* Animations */
+@keyframes fadeUp   { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+@keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
+@keyframes pulse    { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+@keyframes blink    { 0%,100% { opacity:1 } 50% { opacity:0 } }
+@keyframes spin     { to { transform: rotate(360deg) } }
+@keyframes slideIn  { from { transform:translateX(-100%) } to { transform:translateX(0) } }
+
+.animate-fadeUp   { animation: fadeUp  .4s ease both; }
+.animate-fadeIn   { animation: fadeIn  .3s ease both; }
+.animate-pulse    { animation: pulse  1.5s infinite; }
+.animate-blink    { animation: blink    1s infinite; }
+.animate-spin     { animation: spin     1s linear infinite; }
+
+/* Delay utilities */
+.delay-1 { animation-delay: .1s; }
+.delay-2 { animation-delay: .2s; }
+.delay-3 { animation-delay: .3s; }
+
+/* Common cards */
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* Severity badges */
+.badge { display:inline-flex; align-items:center; font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; letter-spacing:.3px; }
+/* Badge tints derive from the tokens so they sit on warm paper, not cool white. */
+.badge-p1 { background:var(--redL);    color:var(--redFg);    border:1px solid var(--redL); }
+.badge-p2 { background:var(--orangeL); color:var(--orangeFg); border:1px solid var(--orangeL); }
+.badge-p3 { background:var(--amberL);  color:var(--amberFg); border:1px solid var(--amberL); }
+.badge-p4 { background:var(--greenL);  color:var(--greenFg);  border:1px solid var(--greenL); }
+.badge-open        { background:var(--redL);    color:var(--redFg); }
+.badge-in-progress { background:var(--orangeL); color:var(--orangeFg); }
+.badge-resolved    { background:var(--greenL);  color:var(--greenFg); }
+
+/* Buttons */
+/* Sovereign buttons: tight 4px radius, flat coral, no gradient or hover lift. */
+.btn { display:inline-flex; align-items:center; gap:6px; font-family:var(--sans); font-size:13px; font-weight:500; border:none; border-radius:4px; cursor:pointer; transition:all .2s; padding:9px 18px; }
+.btn-primary { background:var(--amber); color:#fff; }
+.btn-primary:hover { background:#e64d1f; }
+.btn-secondary { background:var(--white); color:var(--ink); border:1px solid var(--border2); }
+.btn-secondary:hover { border-color:var(--amber); color:var(--amber); }
+.btn-ghost { background:transparent; color:var(--ink3); }
+.btn-ghost:hover { background:var(--paper); color:var(--ink); }
+.btn-danger { background:var(--redL); color:var(--redFg); border:1px solid var(--redL); }
+.btn-danger:hover { border-color:var(--red); }
+.btn-sm { font-size:12px; padding:6px 14px; border-radius:4px; }
+.btn-lg { font-size:15px; padding:13px 28px; border-radius:4px; }
+
+/* Forms */
+.input {
+  width:100%; padding:10px 14px;
+  background:var(--paper); border:1px solid var(--border2);
+  border-radius:4px; font-size:13px; font-family:var(--sans);
+  color:var(--ink); outline:none; transition:border .2s;
+}
+.input:focus { border-color:var(--blue); background:var(--white); }
+.input::placeholder { color:var(--ink3); }
+.label { font-size:12px; font-weight:600; color:var(--ink2); margin-bottom:6px; display:block; }
+.select { appearance:none; background:var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%2394A3B8' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 12px center; }
+
+/* Divider */
+.divider { border:none; border-top:1px solid var(--border); margin:16px 0; }
+
+/* Loading spinner */
+.spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin 1s linear infinite; }
+
+/* AI console */
+.ai-console-layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:16px; height:calc(100vh - 120px); min-height:560px; }
+.ai-chat-panel { display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+.ai-avatar, .ai-empty-icon { display:flex; align-items:center; justify-content:center; background:var(--ink); color:var(--white); font-family:var(--mono); font-weight:700; letter-spacing:0; }
+.ai-avatar { width:34px; height:34px; border-radius:8px; font-size:11px; }
+.ai-empty-icon { width:46px; height:46px; margin:0 auto 14px; border-radius:8px; font-size:13px; box-shadow:0 8px 24px rgba(12,15,26,.18); }
+.ai-online { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--greenFg); }
+.ai-online span { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--greenL); }
+.ai-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; scroll-behavior:smooth; }
+.ai-message-row { display:flex; width:100%; }
+.ai-message-row.user { justify-content:flex-end; }
+.ai-message-row.assistant { justify-content:flex-start; }
+.ai-message { max-width:88%; font-size:13px; line-height:1.65; }
+.ai-message.user { padding:11px 15px; border-radius:8px 8px 2px 8px; color:#fff; background:var(--ink); }
+.ai-message.assistant { width:100%; padding:0; border:1px solid var(--border); border-radius:8px; background:var(--white); overflow:hidden; box-shadow:0 4px 18px rgba(12,15,26,.05); }
+.ai-message.assistant.error { border-color:#FECACA; }
+.ai-answer-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:var(--paper); border-bottom:1px solid var(--border); }
+.ai-answer-label { font-size:10px; font-family:var(--mono); font-weight:600; text-transform:uppercase; color:var(--ink2); }
+.ai-answer-mode { font-size:10px; color:var(--greenFg); }
+.ai-answer-content { padding:16px 18px 18px; color:var(--ink2); }
+.ai-answer-content.is-error { color:var(--redFg); background:var(--redL); }
+.ai-answer-content h3 { margin:18px 0 7px; color:var(--ink); font-size:15px; line-height:1.35; }
+.ai-answer-content h3:first-child { margin-top:0; }
+.ai-answer-content h4 { margin:14px 0 5px; color:var(--ink); font-size:13px; }
+.ai-answer-content p { margin:0 0 10px; }
+.ai-answer-content p:last-child { margin-bottom:0; }
+.ai-answer-content ol, .ai-answer-content ul { margin:4px 0 14px 20px; display:grid; gap:7px; }
+.ai-answer-content li { padding-left:3px; }
+.ai-answer-content li::marker { color:var(--amber); font-weight:700; }
+.ai-answer-content strong { color:var(--ink); font-weight:700; }
+.ai-answer-content code { padding:2px 5px; border-radius:4px; background:var(--paper); color:var(--blue); font:11px/1.5 var(--mono); overflow-wrap:anywhere; }
+.ai-answer-content pre { margin:10px 0 14px; padding:13px 14px; overflow-x:auto; border-radius:6px; background:#111827; border:1px solid #263247; }
+.ai-answer-content pre code { padding:0; background:transparent; color:#DCE6F5; white-space:pre; overflow-wrap:normal; }
+.ai-answer-content a { color:var(--blue); text-decoration:underline; text-underline-offset:2px; }
+.ai-answer-callout { display:flex; align-items:flex-start; gap:8px; margin:10px 0; padding:10px 12px; border-left:3px solid var(--amber); background:var(--amberL); border-radius:0 6px 6px 0; }
+.ai-answer-callout strong { flex-shrink:0; }
+.ai-sources { margin:0 18px 16px; padding-top:12px; border-top:1px solid var(--border); }
+.ai-sources p { margin-bottom:7px; color:var(--ink3); font:600 10px var(--mono); text-transform:uppercase; }
+.ai-sources span { display:inline-flex; margin:0 5px 5px 0; padding:4px 7px; border:1px solid var(--border); border-radius:4px; background:var(--paper); color:var(--ink2); font-size:10px; }
+.ai-send { flex-shrink:0; width:42px; height:42px; justify-content:center; padding:0; border-radius:8px; }
+.ai-side-panel { display:flex; flex-direction:column; gap:14px; overflow-y:auto; padding-right:2px; }
+
+@media (max-width: 980px) {
+  .ai-console-layout { grid-template-columns:1fr; height:auto; min-height:0; }
+  .ai-chat-panel { min-height:640px; }
+  .ai-side-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:visible; }
+}
+@media (max-width: 640px) {
+  .ai-console-layout { gap:12px; }
+  .ai-chat-panel { min-height:calc(100vh - 110px); }
+  .ai-messages { padding:12px; }
+  .ai-message { max-width:94%; }
+  .ai-message.assistant { width:100%; }
+  .ai-answer-content { padding:14px; }
+  .ai-side-panel { grid-template-columns:1fr; }
+}
+
+/* ── Atmosphere & marketing surfaces ────────────────────── */
+@keyframes floaty     { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-10px) } }
+@keyframes drift      { 0% { transform:translate(0,0) } 50% { transform:translate(18px,-14px) } 100% { transform:translate(0,0) } }
+@keyframes ring       { 0% { transform:scale(.55); opacity:.9 } 100% { transform:scale(2.2); opacity:0 } }
+@keyframes sweep      { to { transform:rotate(360deg) } }
+@keyframes shimmer    { 0% { background-position:200% 0 } 100% { background-position:-200% 0 } }
+@keyframes marquee    { from { transform:translateX(0) } to { transform:translateX(-50%) } }
+@keyframes caret      { 0%,100% { opacity:1 } 50% { opacity:0 } }
+
+/* Layered gradient-mesh + grid + grain atmosphere */
+.atmos { position:relative; isolation:isolate; overflow:hidden; }
+.atmos::before {
+  content:""; position:absolute; inset:-20% -10%; z-index:-2; pointer-events:none;
+  background:
+    radial-gradient(38% 44% at 18% 22%, var(--mesh1), transparent 70%),
+    radial-gradient(42% 48% at 84% 14%, var(--mesh2), transparent 72%),
+    radial-gradient(50% 55% at 72% 96%, var(--mesh1), transparent 75%);
+  filter:saturate(115%); animation:drift 22s ease-in-out infinite;
+}
+.atmos::after {
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(ellipse 90% 80% at 50% 30%, #000 35%, transparent 78%);
+          mask-image:radial-gradient(ellipse 90% 80% at 50% 30%, #000 35%, transparent 78%);
+}
+.grain::before {
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.5; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* Eyebrow / kicker label */
+.kicker { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.22em; text-transform:uppercase; color:var(--amber); }
+.kicker::before { content:""; width:22px; height:1px; background:linear-gradient(90deg,transparent,var(--amber)); }
+
+/* Shimmering border chip */
+.chip {
+  display:inline-flex; align-items:center; gap:7px; padding:5px 12px; border-radius:999px;
+  font-size:11px; font-weight:600; color:var(--ink2); background:var(--white);
+  border:1px solid var(--border); box-shadow:var(--shadow);
+}
+
+/* Pulsing live dot */
+.live { position:relative; width:8px; height:8px; border-radius:50%; background:var(--green); }
+.live::after { content:""; position:absolute; inset:0; border-radius:50%; border:1.5px solid var(--green); animation:ring 1.8s ease-out infinite; }
+
+/* Theme toggle */
+.theme-toggle {
+  display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px;
+  border-radius:9px; border:1px solid var(--border); background:var(--white); color:var(--ink2);
+  cursor:pointer; transition:all .2s; font-size:15px;
+}
+.theme-toggle:hover { color:var(--amber); border-color:var(--amberB); transform:translateY(-1px); }
+
+/* Staggered entrance */
+.reveal { opacity:0; animation:fadeUp .7s cubic-bezier(.22,.68,.32,1) forwards; }
+
+
+/* Sovereign refinements (brand tokens live at :root above — one UI app-wide). */
+.theme-toggle { border-radius:4px; }
+.theme-toggle:hover { transform:none; }
+.chip { border-radius:4px; font-family:var(--mono); font-weight:400; }
+/* Fraunces carries its own optical sizing — headings sit at 600, not 400. */
+h1, h2, h3 { font-family:var(--serif); font-weight:600; letter-spacing:-.4px; }

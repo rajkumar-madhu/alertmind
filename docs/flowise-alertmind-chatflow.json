@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "ollama-embed",
+      "position": { "x": 100, "y": 200 },
+      "type": "customNode",
+      "data": {
+        "id": "ollama-embed",
+        "label": "Ollama Embeddings",
+        "name": "ollamaEmbedding",
+        "type": "OllamaEmbedding",
+        "inputs": {
+          "baseUrl": "http://173.249.2.23:11434",
+          "modelName": "nomic-embed-text"
+        }
+      }
+    },
+    {
+      "id": "supabase-vector",
+      "position": { "x": 400, "y": 200 },
+      "type": "customNode",
+      "data": {
+        "id": "supabase-vector",
+        "label": "Supabase Vector Store",
+        "name": "supabaseVectorStore",
+        "type": "SupabaseVectorStore",
+        "inputs": {
+          "supabaseUrl": "http://173.249.2.23:8000",
+          "supabaseKey": "your-service-key",
+          "tableName": "alertmind_documents",
+          "queryName": "match_documents",
+          "topK": 5
+        }
+      }
+    },
+    {
+      "id": "chat-ollama",
+      "position": { "x": 400, "y": 400 },
+      "type": "customNode",
+      "data": {
+        "id": "chat-ollama",
+        "label": "ChatOllama",
+        "name": "chatOllama",
+        "type": "ChatOllama",
+        "inputs": {
+          "baseUrl": "http://173.249.2.23:11434",
+          "modelName": "llama3.3:70b-instruct-q4_K_M",
+          "temperature": 0.2
+        }
+      }
+    },
+    {
+      "id": "buffer-memory",
+      "position": { "x": 100, "y": 400 },
+      "type": "customNode",
+      "data": {
+        "id": "buffer-memory",
+        "label": "Buffer Window Memory",
+        "name": "bufferWindowMemory",
+        "type": "BufferWindowMemory",
+        "inputs": { "k": 5 }
+      }
+    },
+    {
+      "id": "conv-rag-chain",
+      "position": { "x": 700, "y": 300 },
+      "type": "customNode",
+      "data": {
+        "id": "conv-rag-chain",
+        "label": "Conversational RAG Chain",
+        "name": "conversationalRetrievalQAChain",
+        "type": "ConversationalRetrievalQAChain",
+        "inputs": {
+          "systemMessagePrompt": "You are AlertMind AI, an expert ITSM assistant. You help IT engineers resolve incidents quickly. Use ONLY the retrieved context from the knowledge base. Be precise, technical and actionable. Always provide exact commands when available.\n\nContext: {context}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "source": "ollama-embed",   "target": "supabase-vector" },
+    { "source": "supabase-vector","target": "conv-rag-chain" },
+    { "source": "chat-ollama",    "target": "conv-rag-chain" },
+    { "source": "buffer-memory",  "target": "conv-rag-chain" }
+  ]
+}

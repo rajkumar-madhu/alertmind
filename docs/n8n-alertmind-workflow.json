@@ -1,0 +1,53 @@
+{
+  "name": "AlertMind — Prometheus to Ticket",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Prometheus Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "prometheus-alert",
+        "httpMethod": "POST"
+      },
+      "position": [240, 300]
+    },
+    {
+      "id": "filter-firing",
+      "name": "Filter Firing Alerts",
+      "type": "n8n-nodes-base.filter",
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.status}}", "operation": "equal", "value2": "firing" }]
+        }
+      },
+      "position": [480, 300]
+    },
+    {
+      "id": "create-ticket",
+      "name": "Create AlertMind Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:4000/api/webhook/prometheus",
+        "headers": { "Content-Type": "application/json" },
+        "body": "={{JSON.stringify($json)}}"
+      },
+      "position": [720, 300]
+    },
+    {
+      "id": "slack-notify",
+      "name": "Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "parameters": {
+        "channel": "#alerts",
+        "text": "🚨 New Alert: {{$json.ticket_id}} [{{$json.severity}}]\nTicket created in AlertMind"
+      },
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Prometheus Webhook": { "main": [[{ "node": "Filter Firing Alerts", "type": "main", "index": 0 }]] },
+    "Filter Firing Alerts": { "main": [[{ "node": "Create AlertMind Ticket", "type": "main", "index": 0 }]] },
+    "Create AlertMind Ticket": { "main": [[{ "node": "Slack Notification", "type": "main", "index": 0 }]] }
+  }
+}

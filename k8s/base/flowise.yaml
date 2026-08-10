@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowise
+  namespace: alertmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flowise
+  template:
+    metadata:
+      labels:
+        app: flowise
+    spec:
+      containers:
+        - name: flowise
+          image: flowiseai/flowise:latest
+          env:
+            - name: PORT
+              value: "3001"
+            - name: FLOWISE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: alertmind-config
+                  key: FLOWISE_USER
+            - name: FLOWISE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-secrets
+                  key: FLOWISE_PASS
+            - name: DATABASE_PATH
+              value: /root/.flowise
+            - name: SECRETKEY_PATH
+              value: /root/.flowise
+          ports:
+            - containerPort: 3001
+          volumeMounts:
+            - name: flowise-data
+              mountPath: /root/.flowise
+          resources:
+            requests:
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+      volumes:
+        - name: flowise-data
+          persistentVolumeClaim:
+            claimName: flowise-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flowise-pvc
+  namespace: alertmind
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowise
+  namespace: alertmind
+spec:
+  selector:
+    app: flowise
+  ports:
+    - port: 3001
+      targetPort: 3001

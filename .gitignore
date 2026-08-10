@@ -1,0 +1,43 @@
+# ── Environment / secrets ──────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# ── Celery ─────────────────────────────────────────────
+celerybeat-schedule
+celerybeat.pid
+
+# ── Node / Vite frontend ───────────────────────────────
+node_modules/
+dist/
+.vite/
+*.local
+
+# ── Logs & backups ─────────────────────────────────────
+*.log
+backend/logs/
+backup_*.sql
+
+# ── OS / editor ────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.cursor/
+
+# ── Agent / tooling local state ────────────────────────
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.playwright-mcp/
+
+# ── Secrets: created imperatively, never committed ─────
+# See k8s/create-secrets.sh + k8s/base/secret.example.yaml.
+k8s/base/secret.yaml

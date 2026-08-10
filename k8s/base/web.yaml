@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: alertmind
+spec:
+  # Single-node kind cluster (16 GB) — the cluster runs one replica of each
+  # app tier. Keep this at 1 so `kubectl apply -k` doesn't silently scale up.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: registry.gitlab.com/rajkumarmadhu2024/artinfra-finsot/web:latest
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+            limits:
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: alertmind
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80

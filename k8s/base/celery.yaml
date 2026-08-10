@@ -1,0 +1,131 @@
+# Celery worker + beat.
+#
+# WHY THIS EXISTS: docker-compose has always run `celery_worker` and `celery_beat`
+# alongside the api, but the original k8s port never included them. Without the
+# worker, `analyze_ticket_task.delay(...)` enqueues to Redis and nothing ever consumes
+# it — every ticket stays `ai_analyzed=false` and AlertMind's whole AI-triage feature
+# is silently inert. Without beat, `check_sla_breaches_task` never fires, so
+# `sla_breached` is never set and no Slack escalation is sent.
+#
+# Both share the api image (same `./backend` build) and only override the command.
+# Keep the image tag in sync with the api Deployment — overlays/prod pins both via the
+# same `images:` entry.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: alertmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: registry.gitlab.com/rajkumarmadhu2024/artinfra-finsot/api:latest
+          command: ["celery", "-A", "alertmind", "worker", "-l", "info", "--concurrency", "2"]
+          envFrom:
+            - configMapRef:
+                name: alertmind-config
+            - secretRef:
+                name: alertmind-secrets
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-groq
+                  key: api-key
+            # OpenAI-compatible provider (xAI/Grok). Takes precedence over GROQ_* in
+            # api/llm.py. Secret is created imperatively, never committed:
+            #   kubectl -n alertmind create secret generic alertmind-llm \
+            #     --from-literal=api-key='<key>'
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-llm
+                  key: api-key
+                  optional: true
+            - name: LLM_API_BASE
+              value: "https://api.x.ai/v1"
+            - name: LLM_API_MODEL
+              value: "grok-4.5"
+          livenessProbe:
+            # `celery inspect ping` round-trips through the broker, so this fails if
+            # the worker has wedged or lost Redis — not just if the process is alive.
+            exec:
+              command: ["sh", "-c", "celery -A alertmind inspect ping -d celery@$HOSTNAME"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: alertmind
+spec:
+  replicas: 1              # never scale beat past 1 — duplicate schedulers double-fire
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: registry.gitlab.com/rajkumarmadhu2024/artinfra-finsot/api:latest
+          # The schedule DB must live on a writable path; /app is baked into the image.
+          command: ["celery", "-A", "alertmind", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
+          envFrom:
+            - configMapRef:
+                name: alertmind-config
+            - secretRef:
+                name: alertmind-secrets
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-groq
+                  key: api-key
+            # OpenAI-compatible provider (xAI/Grok). Takes precedence over GROQ_* in
+            # api/llm.py. Secret is created imperatively, never committed:
+            #   kubectl -n alertmind create secret generic alertmind-llm \
+            #     --from-literal=api-key='<key>'
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alertmind-llm
+                  key: api-key
+                  optional: true
+            - name: LLM_API_BASE
+              value: "https://api.x.ai/v1"
+            - name: LLM_API_MODEL
+              value: "grok-4.5"
+          volumeMounts:
+            - name: schedule
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              memory: "512Mi"
+      volumes:
+        - name: schedule
+          emptyDir: {}

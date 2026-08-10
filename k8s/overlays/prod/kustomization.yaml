@@ -1,0 +1,133 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: alertmind
+resources:
+  - ../../base
+# The cluster receives these images directly through kind; update the tag for each release.
+images:
+  - name: registry.gitlab.com/rajkumarmadhu2024/artinfra-finsot/api
+    newName: alertmind-api
+    newTag: deploy-20260809-ci
+  - name: registry.gitlab.com/rajkumarmadhu2024/artinfra-finsot/web
+    newName: alertmind-web
+    newTag: deploy-20260808-ops
+patches:
+  - target:
+      version: v1
+      kind: ConfigMap
+      name: alertmind-config
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: alertmind-config
+      data:
+        # Embeddings only (generation goes to Groq). Was pointed at
+        # ollama.linkedeye.svc, which has had zero endpoints since it was set —
+        # so vector search silently returned nothing. See ollama-embed.yaml.
+        OLLAMA_BASE_URL: http://ollama-embed:11434
+        KEYCLOAK_SERVER_URL: http://keycloak.keycloak.svc.cluster.local:8080
+  - target:
+      version: v1
+      kind: Deployment
+      name: ollama
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ollama
+  - target:
+      version: v1
+      kind: PersistentVolumeClaim
+      name: ollama-pvc
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ollama-pvc
+  - target:
+      version: v1
+      kind: PersistentVolumeClaim
+      name: flowise-pvc
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: flowise-pvc
+  - target:
+      version: v1
+      kind: PersistentVolumeClaim
+      name: n8n-pvc
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: n8n-pvc
+  - target:
+      version: v1
+      kind: Deployment
+      name: flowise
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: flowise
+  - target:
+      version: v1
+      kind: Deployment
+      name: n8n
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: n8n
+  - target:
+      version: v1
+      kind: Job
+      name: ollama-model-pull
+    patch: |-
+      $patch: delete
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: ollama-model-pull
+  # Drop the Services too, not just the workloads above. Leaving them behind
+  # creates endpoint-less Services that make dead routes look live, and invites
+  # nginx `upstream` entries for backends this cluster does not run (which is a
+  # startup-time hard failure for the nginx pod — see nginx-configmap.yaml).
+  - target:
+      version: v1
+      kind: Service
+      name: ollama
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ollama
+  - target:
+      version: v1
+      kind: Service
+      name: flowise
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: flowise
+  - target:
+      version: v1
+      kind: Service
+      name: n8n
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: n8n

@@ -1,0 +1,210 @@
+version: "3.9"
+
+services:
+  # ── Postgres + pgvector ───────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: alertmind-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-alertmind}
+      POSTGRES_USER:     ${POSTGRES_USER:-alertmind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alertmind_secret}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5435:5432"
+    networks:
+      - alertmind
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alertmind}"]
+      interval: 10s
+      retries: 5
+
+  # ── Redis (session / queue) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: alertmind-redis
+    restart: unless-stopped
+    ports:
+      - "6389:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - alertmind
+
+  # ── Keycloak Identity Provider ─────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    container_name: alertmind-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-alertmind}
+      KC_DB_USERNAME: ${POSTGRES_USER:-alertmind}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-alertmind_secret}
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./keycloak/alertmind-realm.json:/opt/keycloak/data/import/realm.json
+    ports:
+      - "8088:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - alertmind
+
+  # ── Open Policy Agent (Authorization) ──────────────────────
+  opa:
+    image: openpolicyagent/opa:latest-static
+    container_name: alertmind-opa
+    restart: unless-stopped
+    command: run --server --log-level=info --addr=:8181 /policy.rego
+    volumes:
+      - ./opa/policy.rego:/policy.rego
+    ports:
+      - "8181:8181"
+    networks:
+      - alertmind
+
+  # ── AlertMind Django API ──────────────────────────────────
+  api:
+    build: ./backend
+    container_name: alertmind-api
+    restart: unless-stopped
+    env_file: .env
+    command: uvicorn alertmind.asgi:application --host 0.0.0.0 --port 8000
+    ports:
+      - "4000:8000"
+    volumes:
+      - ./backend:/app
+      - /tmp/alertmind-uploads:/tmp/alertmind-uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      opa:
+        condition: service_started
+    networks:
+      - alertmind
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Celery Worker ─────────────────────────────────────────
+  celery_worker:
+    build: ./backend
+    container_name: alertmind-celery-worker
+    restart: unless-stopped
+    command: celery -A alertmind worker -l info
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+    networks:
+      - alertmind
+
+  # ── Celery Beat ───────────────────────────────────────────
+  celery_beat:
+    build: ./backend
+    container_name: alertmind-celery-beat
+    restart: unless-stopped
+    command: celery -A alertmind beat -l info
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+    networks:
+      - alertmind
+
+  # ── AlertMind Frontend ────────────────────────────────────
+  web:
+    build: ./frontend
+    container_name: alertmind-web
+    restart: unless-stopped
+    ports:
+      - "5175:80"
+    depends_on:
+      - api
+    networks:
+      - alertmind
+
+  # ── Flowise (RAG builder) ─────────────────────────────────
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: alertmind-flowise
+    restart: unless-stopped
+    environment:
+      PORT:            3001
+      FLOWISE_USERNAME: ${FLOWISE_USER:-admin}
+      FLOWISE_PASSWORD: ${FLOWISE_PASS:-flowise_secret}
+      DATABASE_PATH:   /root/.flowise
+      SECRETKEY_PATH:  /root/.flowise
+    volumes:
+      - flowise_data:/root/.flowise
+    ports:
+      - "3009:3001"
+    networks:
+      - alertmind
+
+  # ── n8n (automation / webhooks) ───────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: alertmind-n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER:   ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASS:-n8n_secret}
+      N8N_HOST:              ${DOMAIN:-173.249.2.23}
+      WEBHOOK_URL:           http://${DOMAIN:-173.249.2.23}:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    networks:
+      - alertmind
+
+  # ── Nginx reverse proxy ───────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: alertmind-nginx
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - alertmind
+
+volumes:
+  pg_data:
+  redis_data:
+  flowise_data:
+  n8n_data:
+
+networks:
+  alertmind:
+    driver: bridge
+
