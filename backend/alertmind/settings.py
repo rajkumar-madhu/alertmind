@@ -89,8 +89,19 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS Settings — the SPA origin, not "*". Prod ConfigMap sets FRONTEND_URL.
+_cors_defaults = [
+    "http://localhost:5173",
+    "http://localhost:5175",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5175",
+]
+_cors_from_env = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("FRONTEND_URL", "").split(",")
+    if origin.strip()
+]
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_defaults + _cors_from_env))
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework Settings
@@ -126,6 +137,15 @@ CELERY_BEAT_SCHEDULE = {
 KEYCLOAK_SERVER_URL = os.environ.get("KEYCLOAK_SERVER_URL", "http://keycloak:8080/auth")
 KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "alertmind")
 KEYCLOAK_AUDIENCE = os.environ.get("KEYCLOAK_AUDIENCE", "alertmind-frontend")
+# Optional. Token `iss` is often a public URL that does not match the in-cluster
+# KEYCLOAK_SERVER_URL — only set this when you know the issuer claim.
+KEYCLOAK_ISSUER = os.environ.get("KEYCLOAK_ISSUER", "")
+
+# Shared secret for /api/webhook/*. Alertmanager should send
+#   Authorization: Bearer <WEBHOOK_SECRET>
+# or X-AlertMind-Webhook-Token: <WEBHOOK_SECRET>
+# Unset + DEBUG allows local `make up`; unset in production rejects every webhook.
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 
 # OPA Sidecar URL
 OPA_URL = os.environ.get("OPA_URL", "http://opa:8181/v1/data/alertmind/authz")

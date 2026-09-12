@@ -1,7 +1,7 @@
 // AlertMind — Settings Page
-import { useState } from "react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../lib/store.js";
+import { isAdmin } from "../lib/auth.js";
 
 const SECTIONS = [
   { title:"AI Model", items:[
@@ -34,11 +34,11 @@ const SECTIONS = [
 
 export default function Settings() {
   // Platform configuration is admin-only; everyone else sees it read-only.
-  const isAdmin = useAuthStore((s) => s.user?.role) === "admin";
+  const isAdminUser = isAdmin(useAuthStore((s) => s.user));
   return (
     <div style={{ maxWidth:"700px" }}>
       <h1 style={{ fontFamily:"var(--serif)", fontSize:"24px", color:"var(--ink)", marginBottom:"4px" }}>Settings</h1>
-      <p style={{ fontSize:"12px", color:"var(--ink3)", marginBottom:"22px" }}>AlertMind ITSM configuration{!isAdmin && " · read-only (admin-managed)"}</p>
+      <p style={{ fontSize:"12px", color:"var(--ink3)", marginBottom:"22px" }}>AlertMind ITSM configuration{!isAdminUser && " · read-only (admin-managed)"}</p>
 
       <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
         {SECTIONS.map((sec,si) => (
@@ -55,14 +55,14 @@ export default function Settings() {
                     <div style={{ width:"18px",height:"18px",borderRadius:"50%",background:"var(--white)",position:"absolute",top:"2px",left:item.v?"20px":"2px",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
                   </div>
                 ) : (
-                  <input defaultValue={item.v} disabled={!isAdmin} className="input" style={{ width:"240px",textAlign:"right",fontSize:"12px",fontFamily:item.env?"var(--mono)":"var(--sans)",opacity:isAdmin?1:0.6 }}/>
+                  <input defaultValue={item.v} disabled={!isAdminUser} className="input" style={{ width:"240px",textAlign:"right",fontSize:"12px",fontFamily:item.env?"var(--mono)":"var(--sans)",opacity:isAdminUser?1:0.6 }}/>
                 )}
               </div>
             ))}
           </div>
         ))}
 
-        {isAdmin && (
+        {isAdminUser && (
           <button onClick={()=>toast.success("Settings saved")} className="btn btn-primary btn-lg" style={{ alignSelf:"flex-start" }}>
             Save Settings
           </button>

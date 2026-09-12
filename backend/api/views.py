@@ -18,6 +18,7 @@ from api.models import User, Ticket, Comment, Runbook, CmdbItem, AlertmindDocume
 from api.serializers import UserSerializer, TicketSerializer, CommentSerializer, RunbookSerializer, CmdbItemSerializer
 from api.tasks import analyze_ticket_task, query_vector_store, generate_embedding
 from api.llm import generate, chat
+from api.webhook_auth import is_webhook_authorized
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +124,36 @@ def get_user_profile(request):
 
 
 # ── Webhook Endpoints ─────────────────────────────────────
+SYSTEM_USER_EMAIL = "system@alertmind.ai"
+
+
+class WebhookSecretPermission(permissions.BasePermission):
+    """Shared secret (header or Bearer) — not a Keycloak JWT."""
+
+    message = "Invalid or missing webhook token"
+
+    def has_permission(self, request, view):
+        return is_webhook_authorized(
+            request.headers,
+            getattr(settings, "WEBHOOK_SECRET", ""),
+            debug=settings.DEBUG,
+        )
+
+
+def get_system_user():
+    """Ticket creator for inbound alerts. Never insert admin@ from this path."""
+    user = User.objects.filter(email=SYSTEM_USER_EMAIL).first()
+    if user:
+        return user
+    user = User.objects.filter(role="admin").first()
+    if user:
+        return user
+    return None
+
+
 class WebhookViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.AllowAny] # Webhooks are called externally
+    authentication_classes = []
+    permission_classes = [WebhookSecretPermission]
 
     @action(detail=False, methods=["post"], url_path="alert")
     def alert_webhook(self, request):
@@ -139,19 +168,14 @@ class WebhookViewSet(viewsets.ViewSet):
         if severity not in ["P1", "P2", "P3", "P4"]:
             severity = "P3"
 
-        # Calculate SLA minutes
         sla_mins = {"P1": 15, "P2": 120, "P3": 480, "P4": 1440}.get(severity, 480)
         sla_due_at = timezone.now() + timedelta(minutes=sla_mins)
 
-        # Get system user
-        system_user = User.objects.filter(role="admin").first()
+        system_user = get_system_user()
         if not system_user:
-            system_user = User.objects.create(
-                name="System Admin",
-                email="admin@alertmind.ai",
-                role="admin",
-                team="Platform",
-                password_hash=""
+            return Response(
+                {"error": "Webhook system user is not provisioned"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         ticket = Ticket.objects.create(
@@ -166,7 +190,6 @@ class WebhookViewSet(viewsets.ViewSet):
             sla_due_at=sla_due_at
         )
 
-        # Trigger Celery background analysis
         analyze_ticket_task.delay(ticket.id)
 
         return Response({"ticket_id": str(ticket.id), "severity": severity, "status": "created"}, status=status.HTTP_201_CREATED)
@@ -176,14 +199,11 @@ class WebhookViewSet(viewsets.ViewSet):
         alerts = request.data.get("alerts", [])
         created_ids = []
 
-        system_user = User.objects.filter(role="admin").first()
+        system_user = get_system_user()
         if not system_user:
-            system_user = User.objects.create(
-                name="System Admin",
-                email="admin@alertmind.ai",
-                role="admin",
-                team="Platform",
-                password_hash=""
+            return Response(
+                {"error": "Webhook system user is not provisioned"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         for alert in alerts:
@@ -229,7 +249,7 @@ class WebhookViewSet(viewsets.ViewSet):
         except Ticket.DoesNotExist:
             return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        system_user = User.objects.filter(role="admin").first()
+        system_user = get_system_user()
         resolved_by_name = system_user.name if system_user else "System"
 
         ticket.status = "resolved"

@@ -5,7 +5,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "name", "email", "role", "team", "avatar_url", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "name", "email", "role", "team", "avatar_url", "created_at"]
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -28,7 +28,12 @@ class TicketSerializer(serializers.ModelSerializer):
     # The model FKs are `creator`/`assignee` (db_column created_by/assignee_id);
     # expose the raw id values as read-only so they aren't treated as model fields.
     created_by = serializers.UUIDField(source="creator_id", read_only=True)
-    assignee_id = serializers.UUIDField(read_only=True, allow_null=True)
+    assignee_id = serializers.PrimaryKeyRelatedField(
+        source="assignee",
+        queryset=User.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = Ticket
@@ -67,16 +72,33 @@ class TicketSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "source",
+            "raw_alert",
             "ai_resolution",
             "ai_steps",
             "ai_confidence",
             "ai_analyzed",
             "ai_analyzed_at",
+            "root_cause",
+            "resolution",
+            "prevention",
+            "resolved_by",
+            "resolved_at",
+            "ingested",
             "sla_due_at",
             "sla_breached",
             "created_at",
             "updated_at",
         ]
+
+    def validate_status(self, value):
+        if value == "resolved":
+            raise serializers.ValidationError(
+                "Resolve tickets via POST /api/tickets/{id}/resolve/"
+            )
+        if value not in ("open", "in-progress", "closed"):
+            raise serializers.ValidationError("Invalid status")
+        return value
 
     def get_comment_count(self, obj):
         return obj.comments.count()
@@ -86,7 +108,7 @@ class RunbookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Runbook
         fields = ["id", "title", "content", "category", "tags", "use_count", "created_by", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "use_count", "created_by", "created_at", "updated_at"]
 
 
 class CmdbItemSerializer(serializers.ModelSerializer):

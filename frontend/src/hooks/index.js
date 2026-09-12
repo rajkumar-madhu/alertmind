@@ -45,7 +45,33 @@ export function useUpdateTicket() {
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success("Ticket updated");
     },
-    onError: (e) => toast.error(e.error || "Update failed"),
+    onError: (e) => toast.error(e.error || e.detail || "Update failed"),
+  });
+}
+
+export function useResolveTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => ticketAPI.resolve(id, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["ticket", vars.id] });
+      qc.invalidateQueries({ queryKey: ["tickets"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success("Ticket resolved");
+    },
+    onError: (e) => toast.error(e.error || e.detail || "Resolve failed"),
+  });
+}
+
+export function useAddComment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, content }) => ticketAPI.comment(id, { content }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["ticket", vars.id] });
+      toast.success("Comment added");
+    },
+    onError: (e) => toast.error(e.error || e.detail || "Comment failed"),
   });
 }
 

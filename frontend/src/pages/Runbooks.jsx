@@ -3,13 +3,13 @@ import { useState }    from "react";
 import { useNavigate } from "react-router-dom";
 import { useRunbooks } from "../hooks/index.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 
 const CATEGORIES = ["All","Infrastructure","Database","Network","K8s","Security","Storage","Application"];
 
 export default function Runbooks() {
   const navigate = useNavigate();
-  // Viewers are read-only; the backend (OPA) 403s their writes, so hide the action.
-  const canWrite = useAuthStore((s) => s.user?.role) !== "viewer";
+  const canWrite = hasWriteRole(useAuthStore((s) => s.user));
   const [cat, setCat]       = useState("all");
   const [search, setSearch] = useState("");
   const { data: runbooks = [], isLoading } = useRunbooks(

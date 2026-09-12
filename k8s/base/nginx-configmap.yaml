@@ -35,6 +35,7 @@ data:
 
       limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
       limit_req_zone $binary_remote_addr zone=rag:10m rate=10r/m;
+      limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;
 
       # Static upstreams that always exist in this namespace
       upstream api { server api:8000; }
@@ -60,6 +61,7 @@ data:
         }
 
         location /auth/ {
+          limit_req zone=auth burst=5 nodelay;
           proxy_pass         http://keycloak/;
           proxy_set_header   Host $host;
           proxy_set_header   X-Real-IP $remote_addr;

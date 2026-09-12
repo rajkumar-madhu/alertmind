@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT        NOT NULL,
   email         TEXT        UNIQUE NOT NULL,
+  token_identifier TEXT,
   password_hash TEXT        NOT NULL,
   role          TEXT        NOT NULL DEFAULT 'engineer',
   team          TEXT,
@@ -21,6 +22,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Existing clusters created the table without token_identifier — re-running this
+-- file (make db-init) must still add the column.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_identifier TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token_identifier
+  ON users (token_identifier) WHERE token_identifier IS NOT NULL;
 
 -- ── Tickets ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tickets (
@@ -171,6 +178,11 @@ INSERT INTO users (name, email, password_hash, role, team)
 VALUES ('Admin', 'admin@alertmind.ai',
   '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj0n/X7z5Ake',
   'admin', 'Platform')
+ON CONFLICT (email) DO NOTHING;
+
+-- Webhook ticket creator. Not a Keycloak login; do not share this email with a realm user.
+INSERT INTO users (name, email, password_hash, role, team)
+VALUES ('AlertMind System', 'system@alertmind.ai', '', 'admin', 'Platform')
 ON CONFLICT (email) DO NOTHING;
 
 -- ── Seed sample runbooks ───────────────────────────────────

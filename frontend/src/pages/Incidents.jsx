@@ -3,14 +3,14 @@ import { useState }    from "react";
 import { useNavigate } from "react-router-dom";
 import { useTickets, useDeleteTicket } from "../hooks/index.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 
 const SEV = { P1:{c:"var(--redFg)",bg:"var(--redL)",b:"var(--redL)"}, P2:{c:"var(--orangeFg)",bg:"var(--orangeL)",b:"var(--orangeL)"}, P3:{c:"var(--amberFg)",bg:"var(--amberL)",b:"var(--amberL)"}, P4:{c:"var(--greenFg)",bg:"var(--greenL)",b:"var(--greenL)"} };
 const STA  = { "open":{c:"var(--redFg)",l:"Open"}, "in-progress":{c:"var(--orangeFg)",l:"In Progress"}, "resolved":{c:"var(--greenFg)",l:"Resolved"} };
 
 export default function Incidents() {
   const navigate = useNavigate();
-  // Viewers are read-only; the backend (OPA) 403s ticket creation, so hide the action.
-  const canWrite = useAuthStore((s) => s.user?.role) !== "viewer";
+  const canWrite = hasWriteRole(useAuthStore((s) => s.user));
   const [filters, setFilters] = useState({ status:"", severity:"", search:"" });
   const { data, isLoading } = useTickets(Object.fromEntries(Object.entries(filters).filter(([,v])=>v)));
   const deleteMut = useDeleteTicket();

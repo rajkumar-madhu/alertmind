@@ -1,11 +1,8 @@
 // AlertMind — Profile Page
-import { useState }   from "react";
 import { useAuthStore } from "../lib/store.js";
-import toast from "react-hot-toast";
 
 export default function Profile() {
   const { user } = useAuthStore();
-  const [form, setForm] = useState({ name: user?.name||"", team: user?.team||"" });
 
   return (
     <div style={{ maxWidth:"560px" }}>
@@ -20,13 +17,14 @@ export default function Profile() {
             <p style={{ fontSize:"12px",color:"var(--ink3)" }}>{user?.email} · {user?.role}</p>
           </div>
         </div>
+        <p style={{ fontSize:"13px", color:"var(--ink2)", lineHeight:"1.6", marginBottom:"18px" }}>
+          Name, email, role, and password are managed in Keycloak. Changes there sync on the next sign-in.
+        </p>
         <div style={{ display:"flex",flexDirection:"column",gap:"12px" }}>
-          <div><label className="label">Full Name</label><input className="input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
-          <div><label className="label">Team</label><input className="input" value={form.team} onChange={e=>setForm(f=>({...f,team:e.target.value}))}/></div>
-          <div><label className="label">Email</label><input className="input" value={user?.email} disabled style={{ opacity:.6 }}/></div>
-          <div><label className="label">Role</label><input className="input" value={user?.role} disabled style={{ opacity:.6 }}/></div>
-          <div><label className="label">New Password (optional)</label><input className="input" type="password" placeholder="Leave blank to keep current"/></div>
-          <button onClick={()=>toast.success("Profile updated")} className="btn btn-primary">Save Changes</button>
+          <div><label className="label">Full Name</label><input className="input" value={user?.name||""} disabled style={{ opacity:.6 }}/></div>
+          <div><label className="label">Team</label><input className="input" value={user?.team||""} disabled style={{ opacity:.6 }}/></div>
+          <div><label className="label">Email</label><input className="input" value={user?.email||""} disabled style={{ opacity:.6 }}/></div>
+          <div><label className="label">Role</label><input className="input" value={user?.role||""} disabled style={{ opacity:.6 }}/></div>
         </div>
       </div>
     </div>

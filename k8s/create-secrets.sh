@@ -36,12 +36,12 @@ for arg in "$@"; do
 Usage: ./create-secrets.sh [--rotate] [--print] [--status] [--dry-run]
 
 Creates, in namespace alertmind:
-  alertmind-secrets   POSTGRES_PASSWORD / DATABASE_URL / JWT_SECRET / FLOWISE_PASS /
-                      N8N_PASS / SLACK_WEBHOOK_URL / SMTP_* (blank unless exported)
+  alertmind-secrets   POSTGRES_PASSWORD / DATABASE_URL / JWT_SECRET / WEBHOOK_SECRET /
+                      FLOWISE_PASS / N8N_PASS / SLACK_WEBHOOK_URL / SMTP_* (blank unless exported)
   alertmind-llm       api-key  — the LLM provider key (xAI/Grok by default)
 
 Env overrides (optional):
-  POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB JWT_SECRET
+  POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB JWT_SECRET WEBHOOK_SECRET
   FLOWISE_PASS N8N_PASS SLACK_WEBHOOK_URL
   SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS
   LLM_API_KEY
@@ -74,6 +74,7 @@ POSTGRES_USER="${POSTGRES_USER:-alertmind}"
 POSTGRES_DB="${POSTGRES_DB:-alertmind}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(rand)}"
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
+WEBHOOK_SECRET="${WEBHOOK_SECRET:-$(rand)}"
 FLOWISE_PASS="${FLOWISE_PASS:-$(rand)}"
 N8N_PASS="${N8N_PASS:-$(rand)}"
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
@@ -88,12 +89,13 @@ DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432
 if secret_exists alertmind-secrets && [[ $ROTATE -eq 0 ]]; then
   echo "==> alertmind-secrets already exists — leaving it alone (--rotate to replace)"
 elif [[ $DRY_RUN -eq 1 ]]; then
-  echo "==> would create secret/alertmind-secrets in $NS (13 keys)"
+  echo "==> would create secret/alertmind-secrets in $NS (14 keys)"
 else
   kubectl -n "$NS" create secret generic alertmind-secrets \
     --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
     --from-literal=DATABASE_URL="$DATABASE_URL" \
     --from-literal=JWT_SECRET="$JWT_SECRET" \
+    --from-literal=WEBHOOK_SECRET="$WEBHOOK_SECRET" \
     --from-literal=SUPABASE_URL="" \
     --from-literal=SUPABASE_SERVICE_KEY="" \
     --from-literal=SUPABASE_ANON_KEY="" \
@@ -106,6 +108,21 @@ else
     --from-literal=N8N_PASS="$N8N_PASS" \
     --dry-run=client -o yaml | kubectl apply -f -
   echo "==> alertmind-secrets created/updated"
+fi
+
+# Existing clusters created alertmind-secrets before WEBHOOK_SECRET existed.
+# Merge the key without rotating DATABASE_URL / JWT_SECRET.
+if secret_exists alertmind-secrets; then
+  has_wh=$(kubectl -n "$NS" get secret alertmind-secrets -o jsonpath='{.data.WEBHOOK_SECRET}' 2>/dev/null || true)
+  if [[ -z "$has_wh" || $ROTATE -eq 1 ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "==> would set WEBHOOK_SECRET on alertmind-secrets"
+    else
+      kubectl -n "$NS" patch secret alertmind-secrets --type merge \
+        -p "{\"stringData\":{\"WEBHOOK_SECRET\":\"${WEBHOOK_SECRET}\"}}"
+      echo "==> WEBHOOK_SECRET set on alertmind-secrets"
+    fi
+  fi
 fi
 
 # The LLM key is deliberately a separate Secret: api.yaml/celery.yaml mount it with
@@ -130,6 +147,7 @@ if [[ $PRINT -eq 1 && $DRY_RUN -eq 0 ]]; then
   echo
   echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
   echo "JWT_SECRET=$JWT_SECRET"
+  echo "WEBHOOK_SECRET=$WEBHOOK_SECRET"
   echo "FLOWISE_PASS=$FLOWISE_PASS"
   echo "N8N_PASS=$N8N_PASS"
 fi

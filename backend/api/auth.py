@@ -1,4 +1,7 @@
 import logging
+import threading
+import time
+import uuid
 import jwt
 import requests
 from django.conf import settings
@@ -7,34 +10,160 @@ from api.models import User
 
 logger = logging.getLogger(__name__)
 
-# Global cache for JWKS keys to avoid requesting Keycloak on every API call
+# Process-local JWKS cache. Replaced wholesale on each successful fetch so
+# rotated-out keys stop verifying. TTL forces a refresh even for known kids.
+_jwks_lock = threading.Lock()
 _jwks_cache = {}
+_jwks_fetched_at = 0.0
+JWKS_TTL_SECONDS = 3600
 
-def get_keycloak_public_key(kid):
-    global _jwks_cache
-    if kid in _jwks_cache:
-        return _jwks_cache[kid]
 
-    # Fetch JWKS from Keycloak
-    jwks_url = f"{settings.KEYCLOAK_SERVER_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
+def _jwks_url():
+    return (
+        f"{settings.KEYCLOAK_SERVER_URL}/realms/{settings.KEYCLOAK_REALM}"
+        "/protocol/openid-connect/certs"
+    )
+
+
+def _fetch_jwks():
     try:
-        response = requests.get(jwks_url, timeout=5)
+        response = requests.get(_jwks_url(), timeout=5)
         response.raise_for_status()
         jwks = response.json()
-        
-        for key in jwks.get("keys", []):
-            k = key.get("kid")
-            # Convert JWK to PEM format public key
-            from jwt.algorithms import RSAAlgorithm
-            pub_key = RSAAlgorithm.from_jwk(key)
-            _jwks_cache[k] = pub_key
-            
-        if kid in _jwks_cache:
-            return _jwks_cache[kid]
     except Exception as e:
-        logger.error(f"Failed to fetch or parse JWKS from Keycloak: {e}")
-        
-    return None
+        logger.error(f"Failed to fetch JWKS from Keycloak: {e}")
+        return None
+
+    from jwt.algorithms import RSAAlgorithm
+
+    fetched = {}
+    for key in jwks.get("keys", []):
+        kid = key.get("kid")
+        if not kid:
+            continue
+        kty = (key.get("kty") or "").upper()
+        if kty and kty != "RSA":
+            continue
+        try:
+            fetched[kid] = RSAAlgorithm.from_jwk(key)
+        except Exception as e:
+            logger.warning(f"Skipping JWKS key {kid}: {e}")
+    return fetched
+
+
+def get_keycloak_public_key(kid):
+    """Return the RSA public key for `kid`, or None if it cannot be verified."""
+    global _jwks_cache, _jwks_fetched_at
+    if not kid:
+        return None
+
+    now = time.time()
+    with _jwks_lock:
+        if kid in _jwks_cache and (now - _jwks_fetched_at) < JWKS_TTL_SECONDS:
+            return _jwks_cache[kid]
+
+    fetched = _fetch_jwks()
+    if fetched is not None:
+        with _jwks_lock:
+            _jwks_cache = fetched
+            _jwks_fetched_at = time.time()
+            return _jwks_cache.get(kid)
+
+    with _jwks_lock:
+        return _jwks_cache.get(kid)
+
+
+def reset_jwks_cache():
+    """Test helper — wipe the in-process JWKS cache."""
+    global _jwks_cache, _jwks_fetched_at
+    with _jwks_lock:
+        _jwks_cache = {}
+        _jwks_fetched_at = 0.0
+
+
+def map_realm_roles(token_roles):
+    """Map Keycloak realm roles onto AlertMind roles: admin > engineer > viewer."""
+    roles = token_roles or []
+    if "admin" in roles:
+        return "admin"
+    if "engineer" in roles:
+        return "engineer"
+    return "viewer"
+
+
+def upsert_user_from_payload(payload):
+    """Link a verified token to a `users` row.
+
+    Identity key is Keycloak `sub` (stored as `token_identifier`). Email is
+    used only to attach first login to a pre-seeded row. A token whose email
+    already belongs to a different `sub` is rejected — never stolen.
+    """
+    email = payload.get("email")
+    if not email:
+        raise exceptions.AuthenticationFailed("Token does not contain email claim")
+    if payload.get("email_verified") is False:
+        raise exceptions.AuthenticationFailed("Email is not verified")
+
+    sub = payload.get("sub")
+    if not sub:
+        raise exceptions.AuthenticationFailed("Token does not contain sub claim")
+
+    name = payload.get("name") or payload.get("preferred_username") or email.split("@")[0]
+    role = map_realm_roles(payload.get("realm_access", {}).get("roles", []))
+    team = payload.get("team", "Platform")
+
+    user = User.objects.filter(token_identifier=sub).first()
+    if user:
+        _sync_profile(user, email=email, name=name, role=role, team=team)
+        return user
+
+    user = User.objects.filter(email=email).first()
+    if user:
+        if user.token_identifier and user.token_identifier != sub:
+            raise exceptions.AuthenticationFailed(
+                "Email already linked to another identity"
+            )
+        user.token_identifier = sub
+        _sync_profile(user, email=email, name=name, role=role, team=team)
+        return user
+
+    try:
+        user_id = uuid.UUID(str(sub))
+    except (ValueError, TypeError, AttributeError):
+        user_id = uuid.uuid4()
+
+    return User.objects.create(
+        id=user_id,
+        token_identifier=sub,
+        email=email,
+        name=name,
+        role=role,
+        team=team,
+        password_hash="",
+    )
+
+
+def _sync_profile(user, *, email, name, role, team):
+    updated = False
+    if user.email != email:
+        # Don't clobber another row's unique email.
+        if User.objects.filter(email=email).exclude(pk=user.pk).exists():
+            raise exceptions.AuthenticationFailed(
+                "Email already linked to another identity"
+            )
+        user.email = email
+        updated = True
+    if user.name != name:
+        user.name = name
+        updated = True
+    if user.role != role:
+        user.role = role
+        updated = True
+    if (user.team or "Platform") != (team or "Platform"):
+        user.team = team
+        updated = True
+    if updated:
+        user.save()
 
 
 class KeycloakAuthentication(authentication.BaseAuthentication):
@@ -49,100 +178,38 @@ class KeycloakAuthentication(authentication.BaseAuthentication):
 
         token = parts[1]
         try:
-            # 1. Unverified decode to extract the Key ID (kid)
             unverified_header = jwt.get_unverified_header(token)
             kid = unverified_header.get("kid")
             if not kid:
                 raise exceptions.AuthenticationFailed("Invalid token header: missing 'kid'")
 
-            # 2. Get public key
             public_key = get_keycloak_public_key(kid)
-            
-            # 3. Decode & verify signature
-            if public_key:
-                payload = jwt.decode(
-                    token,
-                    public_key,
-                    algorithms=["RS256"],
-                    audience=settings.KEYCLOAK_AUDIENCE,
-                    options={"verify_aud": True}
-                )
-            else:
-                # Fallback: if Keycloak is temporarily down during startup,
-                # let's allow unverified decode *only* in debug mode for testing resilience.
-                if settings.DEBUG:
-                    logger.warning("Keycloak JWKS lookup failed. Using unverified payload in DEBUG mode.")
-                    payload = jwt.decode(token, options={"verify_signature": False})
-                else:
-                    raise exceptions.AuthenticationFailed("Could not verify token: Keycloak JWKS offline")
-
-            # 4. Extract user details
-            email = payload.get("email")
-            if not email:
-                raise exceptions.AuthenticationFailed("Token does not contain email claim")
-                
-            name = payload.get("name") or payload.get("preferred_username") or email.split("@")[0]
-            sub_uuid = payload.get("sub") # Keycloak internal UUID
-            
-            # Extract roles
-            realm_access = payload.get("realm_access", {})
-            token_roles = realm_access.get("roles", [])
-            
-            # Map roles to AlertMind roles: admin > engineer > viewer
-            role = "viewer"
-            if "admin" in token_roles:
-                role = "admin"
-            elif "engineer" in token_roles:
-                role = "engineer"
-            elif "viewer" in token_roles:
-                role = "viewer"
-                
-            # Extract team (custom claim or default to Platform)
-            team = payload.get("team", "Platform")
-
-            # 5. Sync user in Postgres DB.
-            # Key on email (the natural identifier shared with Keycloak), not the
-            # token `sub`: seed/imported rows may already exist under that email with
-            # a different id, and creating a duplicate would violate users_email_key.
-            try:
-                user, created = User.objects.get_or_create(
-                    email=email,
-                    defaults={
-                        "id": sub_uuid,
-                        "name": name,
-                        "role": role,
-                        "team": team,
-                        "password_hash": "" # password managed by Keycloak
-                    }
+            if not public_key:
+                raise exceptions.AuthenticationFailed(
+                    "Could not verify token: Keycloak JWKS unavailable or unknown kid"
                 )
 
-                # Update details if role or name changed in Keycloak
-                if not created:
-                    updated = False
-                    if user.role != role:
-                        user.role = role
-                        updated = True
-                    if user.name != name:
-                        user.name = name
-                        updated = True
-                    if user.email != email:
-                        user.email = email
-                        updated = True
-                    if updated:
-                        user.save()
-            except Exception as db_err:
-                logger.error(f"Error syncing user {email} in database: {db_err}")
-                # Fallback: create in-memory user to avoid database blocker
-                user = User(id=sub_uuid, email=email, name=name, role=role, team=team)
+            decode_kwargs = {
+                "key": public_key,
+                "algorithms": ["RS256"],
+                "audience": settings.KEYCLOAK_AUDIENCE,
+                "options": {"verify_aud": True, "verify_signature": True},
+            }
+            issuer = getattr(settings, "KEYCLOAK_ISSUER", "") or ""
+            if issuer:
+                decode_kwargs["issuer"] = issuer
 
-            # Store the raw payload inside the request user for OPA or view checks
+            payload = jwt.decode(token, **decode_kwargs)
+            user = upsert_user_from_payload(payload)
             request.jwt_payload = payload
             return (user, token)
 
+        except exceptions.AuthenticationFailed:
+            raise
         except jwt.ExpiredSignatureError:
             raise exceptions.AuthenticationFailed("Token has expired")
         except jwt.InvalidTokenError as e:
             raise exceptions.AuthenticationFailed(f"Invalid token: {e}")
         except Exception as e:
             logger.error(f"Auth exception: {e}")
-            raise exceptions.AuthenticationFailed(str(e))
+            raise exceptions.AuthenticationFailed("Authentication failed")

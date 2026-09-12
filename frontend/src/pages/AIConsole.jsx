@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ragAPI, ingestAPI } from "../lib/api.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 import toast from "react-hot-toast";
 
 function InlineContent({ text }) {
@@ -80,7 +81,7 @@ export default function AIConsole() {
   const ollamaLabel = "Local Ollama";
   // Chat/search are reads (allowed for all); ingest is a write the backend
   // (OPA) 403s for viewers, so hide the ingest card from them.
-  const canIngest = useAuthStore((s) => s.user?.role) !== "viewer";
+  const canIngest = hasWriteRole(useAuthStore((s) => s.user));
   const [messages,   setMessages  ] = useState([]);
   const [input,      setInput     ] = useState("");
   const [loading,    setLoading   ] = useState(false);
