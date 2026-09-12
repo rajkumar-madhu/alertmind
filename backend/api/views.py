@@ -18,7 +18,7 @@ from api.models import User, Ticket, Comment, Runbook, CmdbItem, AlertmindDocume
 from api.serializers import UserSerializer, TicketSerializer, CommentSerializer, RunbookSerializer, CmdbItemSerializer
 from api.tasks import analyze_ticket_task, query_vector_store, generate_embedding
 from api.llm import generate, chat
-from api.webhook_auth import is_webhook_authorized
+from api.webhook_auth import is_webhook_authorized, is_public_webhook_host
 
 logger = logging.getLogger(__name__)
 
@@ -133,10 +133,14 @@ class WebhookSecretPermission(permissions.BasePermission):
     message = "Invalid or missing webhook token"
 
     def has_permission(self, request, view):
+        host = request.get_host() if hasattr(request, "get_host") else ""
         return is_webhook_authorized(
             request.headers,
             getattr(settings, "WEBHOOK_SECRET", ""),
             debug=settings.DEBUG,
+            public_request=is_public_webhook_host(
+                host, getattr(settings, "WEBHOOK_PUBLIC_HOSTS", (".wecrew.in",))
+            ),
         )
 
 

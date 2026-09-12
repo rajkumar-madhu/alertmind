@@ -47,6 +47,11 @@ data:
         server_name alertmind.wecrew.in;
         client_max_body_size 50M;
 
+        location /api/webhook/ {
+          default_type application/json;
+          return 403 '{"detail":"Webhook is cluster-internal"}';
+        }
+
         location /api/ {
           limit_req zone=api burst=20 nodelay;
           proxy_pass         http://api;

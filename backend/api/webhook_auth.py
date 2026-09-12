@@ -1,4 +1,13 @@
-"""Shared-secret check for unauthenticated webhook callers (Alertmanager, n8n)."""
+"""Shared-secret check for unauthenticated webhook callers (Alertmanager, n8n).
+
+wecrew-ops Alertmanager posts in-cluster to
+`http://api.alertmind.svc.cluster.local:8000/api/webhook/prometheus/` — that
+path must keep working without editing the live Argus/wecrew-ops receiver.
+
+The public hosts (`*.wecrew.in`) are a different trust boundary: they always
+require WEBHOOK_SECRET, and nginx/ingress also 403 `/api/webhook/` so the
+internet never reaches the view.
+"""
 
 import hmac
 import logging
@@ -6,6 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 WEBHOOK_TOKEN_HEADER = "X-AlertMind-Webhook-Token"
+DEFAULT_PUBLIC_SUFFIXES = (".wecrew.in",)
 
 
 def extract_webhook_token(headers):
@@ -27,25 +37,55 @@ def extract_webhook_token(headers):
     return ""
 
 
-def is_webhook_authorized(headers, secret, debug=False):
-    """Return True iff the caller presented the configured webhook secret.
+def is_public_webhook_host(host, public_suffixes=DEFAULT_PUBLIC_SUFFIXES):
+    """True for internet-facing AlertMind hosts (Argus/wecrew public DNS)."""
+    hostname = (host or "").split(":")[0].lower().strip()
+    if not hostname:
+        return False
+    for suffix in public_suffixes or ():
+        suffix = (suffix or "").lower().strip()
+        if not suffix:
+            continue
+        if not suffix.startswith("."):
+            if hostname == suffix:
+                return True
+            suffix = "." + suffix
+        if hostname.endswith(suffix):
+            return True
+    return False
 
-    Production (debug=False) fails closed when WEBHOOK_SECRET is unset, so a
-    misconfigured deploy cannot silently expose ticket create/resolve.
-    DEBUG with an empty secret is allowed so `make up` still works before .env
-    is filled in — but a *set* secret is always enforced, including in DEBUG.
+
+def is_webhook_authorized(headers, secret, debug=False, public_request=False):
+    """Authorize a webhook caller.
+
+    * WEBHOOK_SECRET set → token must match (in-cluster and public).
+    * Secret unset + public host (`*.wecrew.in`) → deny. This is the
+      internet-facing API/SPA ingress; never leave it open.
+    * Secret unset + in-cluster Host (Alertmanager → ClusterIP) → allow so
+      the wecrew-ops receiver does not have to change on deploy.
+    * DEBUG + unset secret → allow (local `make up`).
     """
     secret = (secret or "").strip()
     provided = extract_webhook_token(headers)
-    if not secret:
-        if debug:
-            logger.warning(
-                "WEBHOOK_SECRET is unset; allowing webhook in DEBUG. "
-                "Set WEBHOOK_SECRET before any non-local deploy."
-            )
-            return True
-        logger.error("WEBHOOK_SECRET is unset; rejecting webhook (fail closed)")
+    if secret:
+        if not provided:
+            return False
+        return hmac.compare_digest(provided.encode("utf-8"), secret.encode("utf-8"))
+
+    if debug:
+        logger.warning(
+            "WEBHOOK_SECRET is unset; allowing webhook in DEBUG. "
+            "Set WEBHOOK_SECRET before any non-local deploy."
+        )
+        return True
+
+    if public_request:
+        logger.error("WEBHOOK_SECRET is unset; rejecting public webhook (fail closed)")
         return False
-    if not provided:
-        return False
-    return hmac.compare_digest(provided.encode("utf-8"), secret.encode("utf-8"))
+
+    logger.warning(
+        "WEBHOOK_SECRET is unset; allowing in-cluster webhook so wecrew-ops "
+        "Alertmanager keeps firing. Set WEBHOOK_SECRET (and the Bearer on the "
+        "receiver) to lock this path down."
+    )
+    return True

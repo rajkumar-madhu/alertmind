@@ -144,8 +144,15 @@ KEYCLOAK_ISSUER = os.environ.get("KEYCLOAK_ISSUER", "")
 # Shared secret for /api/webhook/*. Alertmanager should send
 #   Authorization: Bearer <WEBHOOK_SECRET>
 # or X-AlertMind-Webhook-Token: <WEBHOOK_SECRET>
-# Unset + DEBUG allows local `make up`; unset in production rejects every webhook.
+# Unset secret: in-cluster Alertmanager (wecrew-ops → ClusterIP) is still
+# allowed; public *.wecrew.in hosts are rejected. A *set* secret is always
+# enforced.
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+WEBHOOK_PUBLIC_HOSTS = tuple(
+    h.strip()
+    for h in os.environ.get("WEBHOOK_PUBLIC_HOSTS", ".wecrew.in").split(",")
+    if h.strip()
+)
 
 # OPA Sidecar URL
 OPA_URL = os.environ.get("OPA_URL", "http://opa:8181/v1/data/alertmind/authz")

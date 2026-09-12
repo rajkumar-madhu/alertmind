@@ -7,6 +7,13 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: 50m
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    # Alertmanager reaches the API via ClusterIP, not this host. Block the
+    # public copy of /api/webhook/ so the internet cannot open/resolve tickets.
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location /api/webhook/ {
+        default_type application/json;
+        return 403 '{"detail":"Webhook is cluster-internal"}';
+      }
 spec:
   ingressClassName: nginx
   rules:
