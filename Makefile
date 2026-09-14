@@ -4,11 +4,11 @@
 ## Start all services
 up:
 	docker compose up -d
-	@echo "✅ AlertMind running"
-	@echo "   Frontend  → http://173.249.2.23"
-	@echo "   API       → http://173.249.2.23/api/health"
-	@echo "   Flowise   → http://173.249.2.23/flowise"
-	@echo "   n8n       → http://173.249.2.23/webhook"
+	@echo "✅ AlertMind running (local compose)"
+	@echo "   Frontend  → http://localhost:8090"
+	@echo "   API       → http://localhost:4000/api/health"
+	@echo "   Keycloak  → http://localhost:8088/auth"
+	@echo "   Prod      → https://alertmind.wecrew.in  /  https://alertmind.api.wecrew.in"
 
 ## Stop all services
 down:

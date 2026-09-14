@@ -208,7 +208,7 @@ export default function TicketDetail() {
 
               {aiState==="error" && (
                 <div style={{ padding:"16px",background:"var(--redL)",border:"1px solid #FECACA",borderRadius:"10px",color:"#DC2626",fontSize:"13px" }}>
-                  ⚠️ Analysis failed. Check that Ollama is running on 173.249.2.23.
+                  ⚠️ Analysis failed. Check that the LLM backend is reachable.
                   <button onClick={handleAnalyze} className="btn btn-danger btn-sm" style={{ marginLeft:"12px" }}>Retry</button>
                 </div>
               )}

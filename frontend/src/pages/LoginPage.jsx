@@ -53,7 +53,7 @@ export function LoginPage() {
 
         <div style={{ position:"relative", zIndex:1, display:"flex", alignItems:"center", gap:"8px" }}>
           <span className="live" />
-          <span style={{ fontFamily:"var(--mono)", fontSize:"11px", color:"var(--ink3)" }}>llama3.3:70b · 173.249.2.23 · self-hosted</span>
+          <span style={{ fontFamily:"var(--mono)", fontSize:"11px", color:"var(--ink3)" }}>Grok · alertmind.wecrew.in · wecrew</span>
         </div>
       </aside>
 

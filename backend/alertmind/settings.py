@@ -10,7 +10,23 @@ SECRET_KEY = os.environ.get("JWT_SECRET", "django-insecure-keycloak-custom-secre
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("NODE_ENV") != "production"
 
-ALLOWED_HOSTS = ["*"]
+from api.hosts import (
+    DEFAULT_ALLOWED_HOSTS,
+    DEFAULT_CORS_ORIGINS,
+    parse_csv,
+)
+
+# Production defaults to the wecrew public hosts + in-cluster Service DNS.
+# DEBUG keeps "*" so local `make up` and ad-hoc Host headers still work.
+# Kube probes send Host: api (see k8s/base/api.yaml httpHeaders).
+_env_hosts = parse_csv(os.environ.get("ALLOWED_HOSTS", ""), ())
+if DEBUG and not _env_hosts:
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = list(_env_hosts or DEFAULT_ALLOWED_HOSTS)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
 # Application definition
 INSTALLED_APPS = [
@@ -89,20 +105,12 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Settings — the SPA origin, not "*". Prod ConfigMap sets FRONTEND_URL.
-_cors_defaults = [
-    "http://localhost:5173",
-    "http://localhost:5175",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5175",
-]
-_cors_from_env = [
-    origin.strip().rstrip("/")
-    for origin in os.environ.get("FRONTEND_URL", "").split(",")
-    if origin.strip()
-]
-CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_defaults + _cors_from_env))
+# CORS / CSRF — SPA origins. Defaults include localhost and the wecrew
+# public hosts so a missing FRONTEND_URL ConfigMap still allows the real site.
+_cors_from_env = parse_csv(os.environ.get("FRONTEND_URL", ""), ())
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(DEFAULT_CORS_ORIGINS + _cors_from_env))
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 
 # REST Framework Settings
 REST_FRAMEWORK = {
@@ -158,7 +166,8 @@ WEBHOOK_PUBLIC_HOSTS = tuple(
 OPA_URL = os.environ.get("OPA_URL", "http://opa:8181/v1/data/alertmind/authz")
 
 # LLM Configuration
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://173.249.2.23:11434")
+# Compose: host Ollama. Prod overlay points this at http://ollama-embed:11434.
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.3:70b-instruct-q4_K_M")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")

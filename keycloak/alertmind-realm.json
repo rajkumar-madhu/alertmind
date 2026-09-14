@@ -30,13 +30,25 @@
       "redirectUris": [
         "http://localhost:5175/*",
         "http://localhost:5173/*",
+        "http://localhost:8090/*",
         "http://localhost/*",
         "http://127.0.0.1:5175/*",
         "http://127.0.0.1:5173/*",
-        "http://127.0.0.1/*"
+        "http://127.0.0.1:8090/*",
+        "http://127.0.0.1/*",
+        "https://alertmind.wecrew.in/*",
+        "https://alertmind.wecrew.in",
+        "https://alertmind.api.wecrew.in/*"
       ],
       "webOrigins": [
-        "*"
+        "http://localhost:5175",
+        "http://localhost:5173",
+        "http://localhost:8090",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8090",
+        "https://alertmind.wecrew.in",
+        "https://alertmind.api.wecrew.in"
       ],
       "protocolMappers": [
         {
