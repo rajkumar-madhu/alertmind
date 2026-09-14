@@ -121,6 +121,8 @@ if secret_exists alertmind-secrets; then
       kubectl -n "$NS" patch secret alertmind-secrets --type merge \
         -p "{\"stringData\":{\"WEBHOOK_SECRET\":\"${WEBHOOK_SECRET}\"}}"
       echo "==> WEBHOOK_SECRET set on alertmind-secrets"
+      echo "    Alertmanager must send Authorization: Bearer <WEBHOOK_SECRET>"
+      echo "    (wecrew-ops receiver http_config.authorization). Use --print to show it."
     fi
   fi
 fi

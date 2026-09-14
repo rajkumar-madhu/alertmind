@@ -141,18 +141,12 @@ KEYCLOAK_AUDIENCE = os.environ.get("KEYCLOAK_AUDIENCE", "alertmind-frontend")
 # KEYCLOAK_SERVER_URL — only set this when you know the issuer claim.
 KEYCLOAK_ISSUER = os.environ.get("KEYCLOAK_ISSUER", "")
 
-# Shared secret for /api/webhook/*. Alertmanager should send
+# Shared secret for /api/webhook/*. Required in production (fail closed when
+# unset). Alertmanager / n8n must send:
 #   Authorization: Bearer <WEBHOOK_SECRET>
 # or X-AlertMind-Webhook-Token: <WEBHOOK_SECRET>
-# Unset secret: in-cluster Alertmanager (wecrew-ops → ClusterIP) is still
-# allowed; public *.wecrew.in hosts are rejected. A *set* secret is always
-# enforced.
+# Host is not a trust bound — do not special-case ClusterIP.
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
-WEBHOOK_PUBLIC_HOSTS = tuple(
-    h.strip()
-    for h in os.environ.get("WEBHOOK_PUBLIC_HOSTS", ".wecrew.in").split(",")
-    if h.strip()
-)
 
 # OPA Sidecar URL
 OPA_URL = os.environ.get("OPA_URL", "http://opa:8181/v1/data/alertmind/authz")
