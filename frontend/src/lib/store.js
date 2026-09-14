@@ -1,40 +1,44 @@
 // AlertMind — Zustand Store (src/lib/store.js)
 import { create } from "zustand";
-import { authAPI } from "./api.js";
+import { authAPI, clearTokens } from "./api.js";
 
 // ── Auth Store ────────────────────────────────────────────
 export const useAuthStore = create((set) => ({
   user   : null,
   token  : localStorage.getItem("am_token"),
   loading: false,
+  ready  : !localStorage.getItem("am_token"),
   error  : null,
 
   login: async (email, password) => {
     set({ loading: true, error: null });
     try {
       const { token, user } = await authAPI.login({ email, password });
-      localStorage.setItem("am_token", token);
-      set({ token, user, loading: false });
+      set({ token, user, loading: false, ready: true });
       return true;
     } catch(e) {
-      set({ error: e.error || "Login failed", loading: false });
+      set({ error: e.error || "Login failed", loading: false, ready: true });
       return false;
     }
   },
 
-  logout: () => {
-    localStorage.removeItem("am_token");
-    set({ user: null, token: null });
+  logout: async () => {
+    await authAPI.logout();
+    set({ user: null, token: null, ready: true });
   },
 
   loadUser: async () => {
-    if (!localStorage.getItem("am_token")) return;
+    if (!localStorage.getItem("am_token")) {
+      clearTokens();
+      set({ user: null, token: null, ready: true });
+      return;
+    }
     try {
       const user = await authAPI.me();
-      set({ user });
+      set({ user, ready: true, token: localStorage.getItem("am_token") });
     } catch {
-      localStorage.removeItem("am_token");
-      set({ user: null, token: null });
+      clearTokens();
+      set({ user: null, token: null, ready: true });
     }
   },
 }));

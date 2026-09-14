@@ -25,12 +25,17 @@ function PageLoader() {
 
 function PrivateRoute({ children }) {
   const token = useAuthStore(s => s.token);
-  return token ? children : <Navigate to="/login" replace />;
+  const ready = useAuthStore(s => s.ready);
+  const user  = useAuthStore(s => s.user);
+  if (!token) return <Navigate to="/login" replace />;
+  if (!ready) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
 }
 
 export default function App() {
-  const { loadUser, token } = useAuthStore();
-  useEffect(() => { if (token) loadUser(); }, []);
+  const loadUser = useAuthStore(s => s.loadUser);
+  useEffect(() => { loadUser(); }, [loadUser]);
 
   return (
     <Suspense fallback={<PageLoader />}>

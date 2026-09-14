@@ -3,11 +3,12 @@ import { useState }    from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useCreateTicket } from "../hooks/index.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 
 export default function NewTicket() {
   const navigate = useNavigate();
   const createMut = useCreateTicket();
-  const role = useAuthStore((s) => s.user?.role);
+  const user = useAuthStore((s) => s.user);
   const [form, setForm] = useState({
     title:"", description:"", severity:"P3",
     category:"Infrastructure", affected_ci:"", team:"",
@@ -16,7 +17,7 @@ export default function NewTicket() {
   // Viewers can't create tickets (OPA 403s the POST). The entry button is
   // already hidden, but guard the route too so a direct URL doesn't dead-end
   // on a 403 after the form is filled. (Kept after all hooks — Rules of Hooks.)
-  if (role === "viewer") return <Navigate to="/app/incidents" replace />;
+  if (!hasWriteRole(user)) return <Navigate to="/app/incidents" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();

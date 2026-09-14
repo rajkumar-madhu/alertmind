@@ -1,8 +1,9 @@
 // AlertMind — TicketDetail Page
 import { useState }                from "react";
 import { useParams, useNavigate }  from "react-router-dom";
-import { useTicket, useUpdateTicket, useAnalyzeTicket } from "../hooks/index.js";
+import { useTicket, useUpdateTicket, useAnalyzeTicket, useResolveTicket, useAddComment } from "../hooks/index.js";
 import { useAIStore, useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 import { grafanaUrl, opsConsoleUrl, hasObservability } from "../lib/observability.js";
 
 const SEV = { P1:{c:"var(--redFg)",bg:"var(--redL)",b:"var(--redL)",l:"CRITICAL"}, P2:{c:"var(--orangeFg)",bg:"var(--orangeL)",b:"var(--orangeL)",l:"HIGH"}, P3:{c:"var(--amberFg)",bg:"var(--amberL)",b:"var(--amberL)",l:"MEDIUM"}, P4:{c:"var(--greenFg)",bg:"var(--greenL)",b:"var(--greenL)",l:"LOW"} };
@@ -13,10 +14,12 @@ export default function TicketDetail() {
   const navigate   = useNavigate();
   const { data: ticket, isLoading } = useTicket(id);
   const updateMut  = useUpdateTicket();
+  const resolveMut = useResolveTicket();
+  const commentMut = useAddComment();
   const analyze    = useAnalyzeTicket();
   const aiStore    = useAIStore();
-  // Viewers are read-only; the backend (OPA) 403s analyze/resolve/comment writes.
-  const canWrite   = useAuthStore((s) => s.user?.role) !== "viewer";
+  const user       = useAuthStore((s) => s.user);
+  const canWrite   = hasWriteRole(user);
   const [tab, setTab]               = useState("details");
   const [resolution, setResolution] = useState("");
   const [comment, setComment]       = useState("");
@@ -29,7 +32,20 @@ export default function TicketDetail() {
 
   const handleAnalyze = () => analyze(ticket).then(()=>setTab("ai"));
   const handleResolve = () => {
-    updateMut.mutate({ id, data: { status:"resolved", resolution, root_cause: aiStore.result?.root_cause || "" } });
+    resolveMut.mutate({
+      id,
+      data: { resolution, root_cause: aiStore.result?.root_cause || "" },
+    });
+  };
+  const handleAccept = () => {
+    updateMut.mutate({
+      id,
+      data: { status: "in-progress", assignee_id: user?.id || null },
+    });
+  };
+  const handleComment = () => {
+    if (!comment.trim()) return;
+    commentMut.mutate({ id, content: comment.trim() }, { onSuccess: () => setComment("") });
   };
 
   const doneCount = aiStore.doneCount();
@@ -93,7 +109,7 @@ export default function TicketDetail() {
                 {aiState==="error"&&"↺ Retry"}
               </button>
               {ticket.status !== "resolved" && (
-                <button onClick={()=>updateMut.mutate({id,data:{status:"in-progress"}})} className="btn btn-secondary" style={{ whiteSpace:"nowrap" }}>
+                <button onClick={handleAccept} className="btn btn-secondary" style={{ whiteSpace:"nowrap" }}>
                   Accept
                 </button>
               )}
@@ -272,10 +288,10 @@ export default function TicketDetail() {
                 </div>
               )}
               <div style={{ display:"flex",gap:"10px" }}>
-                <button onClick={handleResolve} disabled={!resolution.trim()||updateMut.isPending} className="btn btn-primary">
+                <button onClick={handleResolve} disabled={!resolution.trim()||resolveMut.isPending} className="btn btn-primary">
                   ✅ Mark Resolved
                 </button>
-                <button onClick={()=>updateMut.mutate({id,data:{status:"in-progress"}})} className="btn btn-secondary">In Progress</button>
+                <button onClick={handleAccept} className="btn btn-secondary">In Progress</button>
               </div>
             </div>
           )}
@@ -311,11 +327,11 @@ export default function TicketDetail() {
                 {(ticket.comments||[]).map((c,i) => (
                   <div key={i} style={{ display:"flex",gap:"12px" }}>
                     <div style={{ width:"30px",height:"30px",borderRadius:"50%",background:"var(--blueL)",border:"1px solid #BFDBFE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:"700",color:"#2b4cff",flexShrink:0 }}>
-                      {c.user?.name?.slice(0,2).toUpperCase()||"??"}
+                      {c.user?.name?.slice(0,2).toUpperCase()||c.user_name?.slice(0,2).toUpperCase()||"??"}
                     </div>
                     <div style={{ flex:1,background:"var(--paper)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px" }}>
                       <div style={{ display:"flex",gap:"8px",marginBottom:"6px" }}>
-                        <span style={{ fontSize:"12px",fontWeight:"600",color:"var(--ink)" }}>{c.user?.name}</span>
+                        <span style={{ fontSize:"12px",fontWeight:"600",color:"var(--ink)" }}>{c.user?.name || c.user_name}</span>
                         <span style={{ fontSize:"11px",color:"var(--ink3)" }}>{new Date(c.created_at).toLocaleString("en-IN")}</span>
                       </div>
                       <p style={{ fontSize:"13px",color:"var(--ink2)",lineHeight:"1.6" }}>{c.content}</p>
@@ -327,7 +343,7 @@ export default function TicketDetail() {
               {canWrite && (
                 <div style={{ display:"flex",gap:"8px" }}>
                   <textarea className="input" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a comment..." style={{ flex:1,minHeight:"60px",resize:"vertical" }}/>
-                  <button disabled={!comment.trim()} className="btn btn-primary" style={{ alignSelf:"flex-end" }}>Post</button>
+                  <button onClick={handleComment} disabled={!comment.trim()||commentMut.isPending} className="btn btn-primary" style={{ alignSelf:"flex-end" }}>Post</button>
                 </div>
               )}
             </div>

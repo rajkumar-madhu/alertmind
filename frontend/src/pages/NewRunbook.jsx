@@ -3,13 +3,14 @@ import { useState }    from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useCreateRunbook } from "../hooks/index.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 
 const CATEGORIES = ["Infrastructure","Database","Network","K8s","Security","Storage","Application","Other"];
 
 export default function NewRunbook() {
   const navigate  = useNavigate();
   const createMut = useCreateRunbook();
-  const role      = useAuthStore((s) => s.user?.role);
+  const user      = useAuthStore((s) => s.user);
   const [form, setForm] = useState({
     title:"", category:"Infrastructure", tags:"", content:"",
   });
@@ -17,7 +18,7 @@ export default function NewRunbook() {
   // Viewers can't create runbooks (OPA 403s the POST). The entry button is
   // already hidden, but guard the route too so a direct URL doesn't dead-end
   // on a 403 after the form is filled. (Kept after all hooks — Rules of Hooks.)
-  if (role === "viewer") return <Navigate to="/app/runbooks" replace />;
+  if (!hasWriteRole(user)) return <Navigate to="/app/runbooks" replace />;
 
   const set = (k) => (e) => setForm(f=>({...f,[k]:e.target.value}));
 

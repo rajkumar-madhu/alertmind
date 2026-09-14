@@ -21,20 +21,75 @@ const KEYCLOAK_REALM  = import.meta.env.VITE_KEYCLOAK_REALM  || "alertmind";
 const KEYCLOAK_CLIENT = import.meta.env.VITE_KEYCLOAK_CLIENT || "alertmind-frontend";
 const API_BASE        = import.meta.env.VITE_API_URL || "";
 
+const TOKEN_KEY = "am_token";
+const REFRESH_KEY = "am_refresh";
+const tokenUrl = () =>
+  `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
+const logoutUrl = () =>
+  `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/logout`;
+
+export function persistTokens({ access_token, refresh_token }) {
+  if (access_token) localStorage.setItem(TOKEN_KEY, access_token);
+  if (refresh_token) localStorage.setItem(REFRESH_KEY, refresh_token);
+}
+
+export function clearTokens() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+}
+
+let refreshInFlight = null;
+
+async function refreshAccessToken() {
+  const refresh_token = localStorage.getItem(REFRESH_KEY);
+  if (!refresh_token) return null;
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: KEYCLOAK_CLIENT,
+    refresh_token,
+  });
+  const tokenRes = await axios.post(tokenUrl(), body, {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  persistTokens(tokenRes.data);
+  return tokenRes.data.access_token;
+}
+
+function refreshOnce() {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
 const api = axios.create({ baseURL: API_BASE, timeout: 60000 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("am_token");
+  const token = localStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 api.interceptors.response.use(
   (res) => res.data,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem("am_token");
-      window.location.href = "/login";
+  async (err) => {
+    const original = err.config || {};
+    if (err.response?.status === 401 && !original._retry) {
+      original._retry = true;
+      try {
+        const token = await refreshOnce();
+        if (token) {
+          original.headers = original.headers || {};
+          original.headers.Authorization = `Bearer ${token}`;
+          return api(original);
+        }
+      } catch { /* fall through to logout */ }
+      clearTokens();
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(err.response?.data || err);
   }
@@ -60,7 +115,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── Auth (Keycloak ROPC) ──────────────────────────────────
 export const authAPI = {
-  // store.js calls login({ email, password }) and expects { token, user }
   login: async ({ email, password }) => {
     const body = new URLSearchParams({
       grant_type: "password",
@@ -72,18 +126,16 @@ export const authAPI = {
 
     let tokenRes;
     try {
-      tokenRes = await axios.post(
-        `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-        body,
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-      );
+      tokenRes = await axios.post(tokenUrl(), body, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
     } catch (e) {
       throw { error: e.response?.data?.error_description || "Invalid email or password" };
     }
 
+    persistTokens(tokenRes.data);
     const token = tokenRes.data.access_token;
 
-    // Fetch the synced profile from Django (non-fatal if it lags).
     let user = null;
     try {
       const me = await axios.get(`${API_BASE}/api/auth/me/`, {
@@ -95,6 +147,21 @@ export const authAPI = {
     return { token, user };
   },
   me: () => api.get("/api/auth/me/"),
+  logout: async () => {
+    const refresh_token = localStorage.getItem(REFRESH_KEY);
+    clearTokens();
+    if (!refresh_token) return;
+    try {
+      await axios.post(
+        logoutUrl(),
+        new URLSearchParams({
+          client_id: KEYCLOAK_CLIENT,
+          refresh_token,
+        }),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+      );
+    } catch { /* already cleared locally */ }
+  },
 };
 
 // ── Tickets ───────────────────────────────────────────────

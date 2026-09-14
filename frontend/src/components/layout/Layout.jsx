@@ -1,6 +1,7 @@
 // AlertMind — Layout Component
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore, useUIStore } from "../../lib/store.js";
+import { hasWriteRole } from "../../lib/auth.js";
 import { useState, useEffect }      from "react";
 import { useTickets }               from "../../hooks/index.js";
 
@@ -15,8 +16,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { user, logout }          = useAuthStore();
-  // Viewers are read-only; hide the create-ticket shortcut from them.
-  const canWrite = user?.role !== "viewer";
+  const canWrite = hasWriteRole(user);
   const { sidebarOpen, toggleSidebar, theme, toggleTheme } = useUIStore();
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -32,7 +32,7 @@ export default function Layout() {
     return () => window.removeEventListener("resize", fn);
   }, []);
 
-  const handleLogout = () => { logout(); navigate("/login"); };
+  const handleLogout = async () => { await logout(); navigate("/login"); };
 
   const sidebar = (
     <aside style={{

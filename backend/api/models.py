@@ -6,6 +6,8 @@ class User(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
+    # Keycloak `sub`. Unique when set; seed rows start null and are linked on first login.
+    token_identifier = models.CharField(max_length=255, unique=True, null=True, blank=True)
     password_hash = models.CharField(max_length=255)
     role = models.CharField(max_length=50, default="engineer")  # admin|engineer|viewer
     team = models.CharField(max_length=255, null=True, blank=True)

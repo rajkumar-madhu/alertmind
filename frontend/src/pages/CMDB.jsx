@@ -3,14 +3,14 @@ import { useState }  from "react";
 import { useCMDB }   from "../hooks/index.js";
 import { cmdbAPI }   from "../lib/api.js";
 import { useAuthStore } from "../lib/store.js";
+import { hasWriteRole } from "../lib/auth.js";
 import toast from "react-hot-toast";
 
 const TYPE_ICON = { server:"🖥", database:"🗄", network:"🌐", service:"⚙", application:"📱" };
 
 export default function CMDB() {
   const { data: items = [], isLoading, refetch } = useCMDB();
-  // Viewers are read-only; the backend (OPA) 403s their writes, so hide the action.
-  const canWrite = useAuthStore((s) => s.user?.role) !== "viewer";
+  const canWrite = hasWriteRole(useAuthStore((s) => s.user));
   const [showForm, setShowForm] = useState(false);
   const [form, setForm]         = useState({ name:"", type:"server", environment:"production", ip_address:"", hostname:"", team:"" });
 

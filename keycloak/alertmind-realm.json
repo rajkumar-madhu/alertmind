@@ -57,7 +57,7 @@
       "publicClient": false,
       "secret": "alertmind-backend-secret-key-123456",
       "protocol": "openid-connect",
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "standardFlowEnabled": false,
       "serviceAccountsEnabled": true
     }

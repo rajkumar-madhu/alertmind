@@ -22,12 +22,20 @@ allow if {
     valid_engineer_create_resource
 }
 
-# Engineers can update tickets if they are the creator or assignee
+# Engineers can update tickets if they are the creator or assignee.
+# Unassigned tickets are claimable by any engineer (Accept / first-touch).
 allow if {
     input.user.roles[_] == "engineer"
     input.action == "update"
     input.resource == "ticket"
     is_owner_or_assignee
+}
+
+allow if {
+    input.user.roles[_] == "engineer"
+    input.action == "update"
+    input.resource == "ticket"
+    ticket_is_unassigned
 }
 
 # Engineers can update comments if they are the creator
@@ -80,13 +88,37 @@ valid_engineer_create_resource if {
 }
 
 is_owner_or_assignee if {
+    input.resource_owner_id
+    input.resource_owner_id == input.user.id
+}
+
+is_owner_or_assignee if {
+    input.resource_assignee_id
+    input.resource_assignee_id == input.user.id
+}
+
+# Email fallback for rows whose UUID was not supplied (legacy payloads).
+is_owner_or_assignee if {
+    input.resource_owner
     input.resource_owner == input.user.email
 }
 
 is_owner_or_assignee if {
+    input.resource_assignee
     input.resource_assignee == input.user.email
 }
 
+ticket_is_unassigned if {
+    not input.resource_assignee_id
+    not input.resource_assignee
+}
+
 is_comment_owner if {
+    input.resource_owner_id
+    input.resource_owner_id == input.user.id
+}
+
+is_comment_owner if {
+    input.resource_owner
     input.resource_owner == input.user.email
 }
