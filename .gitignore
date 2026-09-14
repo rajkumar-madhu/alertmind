@@ -31,7 +31,9 @@ backup_*.sql
 *.swp
 .idea/
 .vscode/
-.cursor/
+.cursor/*
+# Keep the committed Cloud Agent / dev environment definition tracked.
+!.cursor/environment.json
 
 # ── Agent / tooling local state ────────────────────────
 .claude/settings.local.json
