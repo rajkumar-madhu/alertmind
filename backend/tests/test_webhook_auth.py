@@ -1,10 +1,6 @@
 import unittest
 
-from api.webhook_auth import (
-    extract_webhook_token,
-    is_public_webhook_host,
-    is_webhook_authorized,
-)
+from api.webhook_auth import extract_webhook_token, is_webhook_authorized
 
 
 class WebhookAuthTests(unittest.TestCase):
@@ -16,25 +12,12 @@ class WebhookAuthTests(unittest.TestCase):
         token = extract_webhook_token({"Authorization": "Bearer abc"})
         self.assertEqual(token, "abc")
 
-    def test_public_wecrew_hosts(self):
-        self.assertTrue(is_public_webhook_host("alertmind.api.wecrew.in"))
-        self.assertTrue(is_public_webhook_host("alertmind.wecrew.in:443"))
-        self.assertFalse(is_public_webhook_host("api.alertmind.svc.cluster.local"))
-        self.assertFalse(is_public_webhook_host("localhost"))
-
-    def test_in_cluster_allows_missing_secret_in_production(self):
-        # wecrew-ops Alertmanager → ClusterIP must keep working without a secret.
-        self.assertTrue(
-            is_webhook_authorized({}, "", debug=False, public_request=False)
-        )
-
-    def test_public_host_rejects_missing_secret_in_production(self):
-        self.assertFalse(
-            is_webhook_authorized({}, "", debug=False, public_request=True)
-        )
+    def test_production_rejects_missing_secret(self):
+        # ClusterIP Host is not a trust bound; unsigned webhooks stay closed.
+        self.assertFalse(is_webhook_authorized({}, "", debug=False))
 
     def test_debug_allows_missing_secret(self):
-        self.assertTrue(is_webhook_authorized({}, "", debug=True, public_request=True))
+        self.assertTrue(is_webhook_authorized({}, "", debug=True))
 
     def test_wrong_token_rejected_even_in_debug(self):
         self.assertFalse(
@@ -51,14 +34,11 @@ class WebhookAuthTests(unittest.TestCase):
                 {"Authorization": "Bearer expected"},
                 "expected",
                 debug=False,
-                public_request=True,
             )
         )
 
     def test_empty_provided_rejected_when_secret_set(self):
-        self.assertFalse(
-            is_webhook_authorized({}, "expected", debug=False, public_request=False)
-        )
+        self.assertFalse(is_webhook_authorized({}, "expected", debug=False))
 
 
 if __name__ == "__main__":
