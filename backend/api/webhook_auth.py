@@ -12,10 +12,12 @@ internet never reaches the view.
 import hmac
 import logging
 
+from api.hosts import WECREW_PUBLIC_SUFFIX
+
 logger = logging.getLogger(__name__)
 
 WEBHOOK_TOKEN_HEADER = "X-AlertMind-Webhook-Token"
-DEFAULT_PUBLIC_SUFFIXES = (".wecrew.in",)
+DEFAULT_PUBLIC_SUFFIXES = (WECREW_PUBLIC_SUFFIX,)
 
 
 def extract_webhook_token(headers):

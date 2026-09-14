@@ -16,37 +16,29 @@ Self-hosted · Local LLM · India-first · No cloud AI costs
 | RAG Build | Flowise (no-code RAG)                         |
 | Automation| n8n webhooks                                  |
 | Proxy     | Nginx                                         |
-| Infra     | Docker Compose · Contabo 32GB VPS             |
+| Infra     | Kubernetes (wecrew) · Docker Compose locally   |
 
 ---
 
-## Quick Start (Contabo 173.249.2.23)
+## Quick Start
+
+**Production (wecrew):** `https://alertmind.wecrew.in` (SPA) · `https://alertmind.api.wecrew.in` (API)
+
+**Local compose:**
 
 ```bash
-# 1. Upload and extract
-scp alertmind-fullstack.zip root@173.249.2.23:~/
-ssh root@173.249.2.23
-unzip alertmind-fullstack.zip && cd alertmind
-
-# 2. Configure environment
 cp .env.example .env
-nano .env        # Set JWT_SECRET, passwords
-
-# 3. Pull Ollama models (~30 min)
-make pull
-
-# 4. Start all services
+# For local: set NODE_ENV=development, DOMAIN=localhost,
+# FRONTEND_URL=http://localhost:5173,http://localhost:5175,http://localhost:8090
+# and leave VITE_API_URL empty so Vite proxies /api → :4000
 make up
-
-# 5. Init database
 make db-init
 ```
 
 **Access:**
-- 🌐 Frontend  → `http://173.249.2.23`
-- 🔌 API       → `http://173.249.2.23/api/health`
-- 🤖 Flowise   → `http://173.249.2.23:3001`
-- ⚙️  n8n       → `http://173.249.2.23:5678`
+- 🌐 Frontend  → `https://alertmind.wecrew.in` (prod) · `http://localhost:8090` (compose)
+- 🔌 API       → `https://alertmind.api.wecrew.in/api/health` · `http://localhost:4000/api/health`
+- 🔐 Keycloak  → `/auth/` on the SPA host · `http://localhost:8088/auth` locally
 
 **Default login:** `admin@alertmind.ai` / `Admin@2026`  
 ⚠️ Change password immediately after first login!
@@ -57,13 +49,15 @@ make db-init
 
 | Service    | Port  | Purpose                     |
 |------------|-------|-----------------------------|
-| Frontend   | 80    | React SPA (via Nginx)       |
-| API        | 4000  | Express REST API            |
-| PostgreSQL | 5432  | Database + pgvector         |
-| Redis      | 6379  | Cache / sessions            |
-| Flowise    | 3001  | No-code RAG builder         |
-| n8n        | 5678  | Automation / webhooks       |
-| Ollama     | 11434 | Local LLM server (external) |
+| Frontend   | 8090  | SPA via compose nginx (prod: 443) |
+| API        | 4000  | Django / uvicorn (container 8000) |
+| PostgreSQL | 5435  | Database + pgvector (container 5432) |
+| Redis      | 6389  | Celery broker (container 6379) |
+| Keycloak   | 8088  | OIDC (`/auth`) |
+| OPA        | 8181  | Authorization |
+| Flowise    | 3009  | No-code RAG builder (optional) |
+| n8n        | 5678  | Automation / webhooks (optional) |
+| Ollama     | 11434 | Embeddings (in-cluster: ollama-embed) |
 
 ---
 
@@ -84,8 +78,6 @@ make db-init
 
 | Endpoint                  | Method | Auth | Description              |
 |---------------------------|--------|------|--------------------------|
-| `/api/auth/login`         | POST   | No   | Login                    |
-| `/api/auth/register`      | POST   | No   | Register user            |
 | `/api/auth/me`            | GET    | Yes  | Get profile              |
 | `/api/tickets`            | GET    | Yes  | List tickets             |
 | `/api/tickets`            | POST   | Yes  | Create ticket            |
@@ -97,8 +89,8 @@ make db-init
 | `/api/ingest/stats`       | GET    | Yes  | KB stats                 |
 | `/api/runbooks`           | GET    | Yes  | List runbooks            |
 | `/api/dashboard/stats`    | GET    | Yes  | Dashboard stats          |
-| `/api/webhook/prometheus` | POST   | No   | Prometheus alerts        |
-| `/api/webhook/alert`      | POST   | No   | Generic alert webhook    |
+| `/api/webhook/prometheus` | POST   | Cluster / secret | Prometheus alerts        |
+| `/api/webhook/alert`      | POST   | Cluster / secret | Generic alert webhook    |
 | `/api/cmdb`               | GET    | Yes  | CMDB items               |
 
 ---
@@ -106,11 +98,13 @@ make db-init
 ## Prometheus Webhook
 
 ```yaml
-# alertmanager.yml
+# In-cluster (wecrew-ops Alertmanager → ClusterIP). Do not point this
+# at https://alertmind.wecrew.in or https://alertmind.api.wecrew.in —
+# those public hosts 403 /api/webhook/.
 receivers:
   - name: alertmind
     webhook_configs:
-      - url: http://173.249.2.23/api/webhook/prometheus
+      - url: http://api.alertmind.svc.cluster.local:8000/api/webhook/prometheus/
         send_resolved: false
 
 route:
@@ -122,7 +116,7 @@ route:
 
 ## n8n Automation
 
-1. Open n8n → `http://173.249.2.23:5678`
+1. Open n8n → `http://localhost:5678` (compose; not on the wecrew public hosts)
 2. Import: `docs/n8n-alertmind-workflow.json`
 3. Workflow: Prometheus alert → AlertMind ticket → Slack notify
 
@@ -132,19 +126,10 @@ route:
 
 ```bash
 # Change default passwords
-nano .env   # JWT_SECRET, POSTGRES_PASSWORD, FLOWISE_PASS, N8N_PASS
+nano .env   # JWT_SECRET, POSTGRES_PASSWORD, WEBHOOK_SECRET, FLOWISE_PASS, N8N_PASS
 
-# Firewall
-ufw allow 22,80,443
-ufw deny 4000,5432,6379,3001,5678,11434  # internal only
-ufw enable
-
-# SSH key auth
-ssh-keygen && ssh-copy-id root@173.249.2.23
-sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-
-# fail2ban
-apt install fail2ban && systemctl enable fail2ban
+# Public hosts are TLS via the wecrew ingress (alertmind.wecrew.in /
+# alertmind.api.wecrew.in). Do not expose compose ports 4000/5435/6389/8088.
 ```
 
 ---

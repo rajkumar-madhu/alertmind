@@ -94,7 +94,7 @@ export default function Landing() {
       {/* Hero */}
       <header style={{ maxWidth:"1180px", margin:"0 auto", padding:"clamp(24px,5vw,56px) clamp(20px,6vw,72px) 40px", display:"grid", gridTemplateColumns:"minmax(0,1.05fr) minmax(0,.95fr)", gap:"40px", alignItems:"center" }}>
         <div>
-          <div className="kicker reveal" style={{ animationDelay:".05s" }}>AI-Powered ITSM · Self-hosted</div>
+          <div className="kicker reveal" style={{ animationDelay:".05s" }}>AI-Powered ITSM · Wecrew</div>
           <h1 className="reveal" style={{ animationDelay:".12s", fontFamily:"var(--serif)", fontWeight:"600", fontSize:"clamp(42px,5.6vw,76px)", lineHeight:"1.04", letterSpacing:"-1px", margin:"18px 0 18px" }}>
             Resolve incidents<br/><em style={{ color:"var(--amberFg)", fontStyle:"italic" }}>before they escalate.</em>
           </h1>

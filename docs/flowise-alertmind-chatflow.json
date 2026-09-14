@@ -10,7 +10,7 @@
         "name": "ollamaEmbedding",
         "type": "OllamaEmbedding",
         "inputs": {
-          "baseUrl": "http://173.249.2.23:11434",
+          "baseUrl": "http://ollama-embed:11434",
           "modelName": "nomic-embed-text"
         }
       }
@@ -25,7 +25,7 @@
         "name": "supabaseVectorStore",
         "type": "SupabaseVectorStore",
         "inputs": {
-          "supabaseUrl": "http://173.249.2.23:8000",
+          "supabaseUrl": "",
           "supabaseKey": "your-service-key",
           "tableName": "alertmind_documents",
           "queryName": "match_documents",
@@ -43,7 +43,7 @@
         "name": "chatOllama",
         "type": "ChatOllama",
         "inputs": {
-          "baseUrl": "http://173.249.2.23:11434",
+          "baseUrl": "http://ollama-embed:11434",
           "modelName": "llama3.3:70b-instruct-q4_K_M",
           "temperature": 0.2
         }

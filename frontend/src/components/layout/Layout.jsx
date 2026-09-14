@@ -85,7 +85,7 @@ export default function Layout() {
           <span style={{ fontSize:"11px", fontWeight:"700", color:"var(--greenFg)" }}>AI Online</span>
         </div>
         <div style={{ fontSize:"10px", color:"var(--greenFg)" }}>llama3.3:70b</div>
-        <div style={{ fontSize:"10px", color:"var(--greenFg)", fontFamily:"var(--mono)" }}>173.249.2.23</div>
+        <div style={{ fontSize:"10px", color:"var(--greenFg)", fontFamily:"var(--mono)" }}>alertmind.wecrew.in</div>
       </div>
 
       {/* User */}

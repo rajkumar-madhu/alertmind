@@ -6,14 +6,14 @@ import { isAdmin } from "../lib/auth.js";
 const SECTIONS = [
   { title:"AI Model", items:[
     { k:"LLM Model",          v:"llama3.3:70b-instruct-q4_K_M", type:"text", env:"LLM_MODEL" },
-    { k:"Ollama Server",      v:"http://173.249.2.23:11434",     type:"text", env:"OLLAMA_BASE_URL" },
+    { k:"Ollama Server",      v:"http://ollama-embed:11434",      type:"text", env:"OLLAMA_BASE_URL" },
     { k:"Embedding Model",    v:"nomic-embed-text",              type:"text", env:"EMBED_MODEL" },
     { k:"Temperature",        v:"0.2",                           type:"text", env:"LLM_TEMP" },
     { k:"Context Window",     v:"8192",                          type:"text", env:"LLM_CTX" },
     { k:"RAG Top-K Results",  v:"5",                             type:"text", env:"RAG_TOP_K" },
   ]},
   { title:"Database", items:[
-    { k:"Supabase URL",        v:"http://173.249.2.23:8000", type:"text" },
+    { k:"Postgres URL",        v:"postgresql://…@postgresql:5432/alertmind", type:"text", env:"DATABASE_URL" },
     { k:"Vector Table",        v:"alertmind_documents",      type:"text" },
     { k:"Chunk Size",          v:"1000",                     type:"text" },
     { k:"Chunk Overlap",       v:"200",                      type:"text" },
